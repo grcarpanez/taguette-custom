@@ -12,7 +12,7 @@ Este documento é a bússola operacional do projeto. Ele deve ser consultado e a
 
 | Macro-Fase | Descrição Resumida | Status | Progresso |
 | :--- | :--- | :---: | :---: |
-| **Fase 0** | Governança, Diretrizes de Agentes (`AGENTS.md`), Blindagem Git e Setup | **Em Andamento** | 75% |
+| **Fase 0** | Governança, Diretrizes de Agentes (`AGENTS.md`), Blindagem Git e Setup | **Concluído** | 100% |
 | **Fase 1** | Especificação Funcional do Sistema (`docs/FSD.md`) e Mapeamento de Incrementos | **Pendente** | 0% |
 | **Fase 2** | Blindagem de Segurança e Validação Profunda de Arquivos Importados | **Pendente** | 0% |
 | **Fase 3** | Criptografia Simétrica de Dados Sensíveis e Hardening de Sessões/RBAC | **Pendente** | 0% |
@@ -32,8 +32,8 @@ Este documento é a bússola operacional do projeto. Ele deve ser consultado e a
 - [x] Blindagem do repositório Git:
   - Remote original renomeado para `upstream`.
   - Push para upstream desativado permanentemente (`no_push`).
-- [ ] Configuração do repositório remoto pessoal do usuário (`origin`) para sincronização e backup na nuvem.
-- [ ] Commit inicial de governança na branch principal.
+- [x] Configuração do repositório remoto pessoal do usuário (`origin`) para sincronização e backup na nuvem.
+- [x] Commit inicial e push de governança na branch principal (`origin/master`).
 
 ---
 
