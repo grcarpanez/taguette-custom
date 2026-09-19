@@ -1024,6 +1024,8 @@ function updateTagsList() {
   }
 }
 
+updateTagsList();
+
 function updateTagCount(id, delta) {
   var tag = tags['' + id];
   if(tag) {
