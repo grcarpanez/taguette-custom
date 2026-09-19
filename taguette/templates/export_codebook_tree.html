@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ project.name }} - Livro de Códigos Interativo (Codebook)</title>
+  <style>
+    :root {
+      --bg-color: #f8f9fa;
+      --card-bg: #ffffff;
+      --text-main: #212529;
+      --text-muted: #6c757d;
+      --primary: #007bff;
+      --primary-hover: #0056b3;
+      --border: #dee2e6;
+      --badge-bg: #e9ecef;
+      --badge-text: #495057;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      margin: 0;
+      padding: 2rem 1rem;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    header {
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      margin: 0 0 0.5rem 0;
+      color: #343a40;
+      font-size: 1.8rem;
+    }
+    .project-desc {
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .search-box {
+      flex-grow: 1;
+      min-width: 240px;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+    .btn {
+      background-color: #e9ecef;
+      color: #333;
+      border: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background-color 0.15s ease-in-out;
+    }
+    .btn:hover {
+      background-color: #dde2e6;
+    }
+    .tree, .tree ul {
+      list-style-type: none;
+      padding-left: 1.5rem;
+      margin: 0;
+    }
+    .tree {
+      padding-left: 0;
+    }
+    .tree li {
+      margin: 0.5rem 0;
+      position: relative;
+    }
+    .tag-card {
+      display: inline-flex;
+      flex-direction: column;
+      background: #fdfdfd;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid var(--primary);
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      width: 100%;
+      box-sizing: border-box;
+      transition: box-shadow 0.15s ease;
+    }
+    .tag-card:hover {
+      box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    }
+    .tag-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .toggle-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.8rem;
+      color: var(--primary);
+      padding: 0 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 3px;
+    }
+    .toggle-btn:hover {
+      background: #e2e8f0;
+    }
+    .tag-name {
+      font-weight: 600;
+      font-size: 1.05rem;
+      color: #1a202c;
+    }
+    .tag-badges {
+      margin-left: auto;
+      display: flex;
+      gap: 0.4rem;
+    }
+    .badge {
+      background-color: var(--badge-bg);
+      color: var(--badge-text);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border-radius: 12px;
+    }
+    .tag-desc {
+      margin-top: 0.35rem;
+      font-size: 0.9rem;
+      color: #4a5568;
+      background: #f7fafc;
+      padding: 0.4rem 0.6rem;
+      border-radius: 3px;
+      border-left: 2px solid #cbd5e0;
+    }
+    .tree li.collapsed > ul {
+      display: none;
+    }
+    .empty-state {
+      padding: 2rem;
+      text-align: center;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>{{ project.name }}</h1>
+      <div class="project-desc">{{ project.description or "Livro de Códigos Hierárquico" }}</div>
+      <div class="controls">
+        <input type="text" id="searchInput" class="search-box" placeholder="Pesquisar tags ou descrições...">
+        <button class="btn" id="btnExpandAll">Expandir Todos</button>
+        <button class="btn" id="btnCollapseAll">Recolher Todos</button>
+      </div>
+    </header>
+
+    {% macro render_tag_node(node) %}
+      <li id="tag-{{ node.tag.id }}">
+        <div class="tag-card">
+          <div class="tag-header">
+            {% if node.children %}
+              <button class="toggle-btn" onclick="toggleNode(this)" title="Expandir/Recolher">▼</button>
+            {% else %}
+              <span style="width: 1.5rem; display: inline-block;"></span>
+            {% endif %}
+            <span class="tag-name">{{ node.tag.path }}</span>
+            <div class="tag-badges">
+              <span class="badge" title="Número de destaques">{{ node.tag.highlights_count }} destaques</span>
+              <span class="badge" title="Número de documentos">{{ node.tag.documents_count }} docs</span>
+            </div>
+          </div>
+          {% if node.tag.description %}
+            <div class="tag-desc">{{ node.tag.description }}</div>
+          {% endif %}
+        </div>
+        {% if node.children %}
+          <ul>
+            {% for child in node.children %}
+              {{ render_tag_node(child) }}
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </li>
+    {% endmacro %}
+
+    <main>
+      {% if tree_nodes %}
+        <ul class="tree" id="tagTree">
+          {% for node in tree_nodes %}
+            {{ render_tag_node(node) }}
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state">Nenhuma tag cadastrada neste projeto.</div>
+      {% endif %}
+    </main>
+  </div>
+
+  <script>
+    function toggleNode(btn) {
+      const li = btn.closest('li');
+      li.classList.toggle('collapsed');
+      btn.textContent = li.classList.contains('collapsed') ? '▶' : '▼';
+    }
+
+    document.getElementById('btnExpandAll')?.addEventListener('click', function() {
+      document.querySelectorAll('.tree li').forEach(li => {
+        li.classList.remove('collapsed');
+        const btn = li.querySelector('.toggle-btn');
+        if (btn) btn.textContent = '▼';
+      });
+    });
+
+    document.getElementById('btnCollapseAll')?.addEventListener('click', function() {
+      document.querySelectorAll('.tree li').forEach(li => {
+        if (li.querySelector('ul')) {
+          li.classList.add('collapsed');
+          const btn = li.querySelector('.toggle-btn');
+          if (btn) btn.textContent = '▶';
+        }
+      });
+    });
+
+    document.getElementById('searchInput')?.addEventListener('input', function(e) {
+      const query = e.target.value.toLowerCase().trim();
+      const allCards = document.querySelectorAll('.tag-card');
+
+      if (!query) {
+        document.querySelectorAll('.tree li').forEach(li => {
+          li.style.display = '';
+        });
+        return;
+      }
+
+      document.querySelectorAll('.tree li').forEach(li => {
+        li.style.display = 'none';
+      });
+
+      allCards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (text.includes(query)) {
+          let curr = card.closest('li');
+          while (curr && curr.classList.contains('tree') === false) {
+            curr.style.display = '';
+            curr.classList.remove('collapsed');
+            const btn = curr.querySelector('.toggle-btn');
+            if (btn) btn.textContent = '▼';
+            curr = curr.parentElement?.closest('li');
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>

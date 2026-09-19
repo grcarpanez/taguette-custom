@@ -71,14 +71,30 @@ class _Translator(object):
         return trans
 
 
+class ExportTagInfo(object):
+    """Representação estruturada de uma tag para exportação."""
+    def __init__(self, id, path, full_path, description):
+        self.id = id
+        self.path = path
+        self.full_path = full_path
+        self.description = description or ""
+
+    def __str__(self):
+        return self.full_path
+
+
 def _get_highlights_for_export(db, project_id, path):
+    # Carregar todas as tags do projeto para montar full_path e obter descrições
+    tags_by_id = {
+        tag.id: tag
+        for tag in db.query(database.Tag).filter(database.Tag.project_id == project_id).all()
+    }
+
     if path:
         t_highlight = database.Highlight.__table__
         t_highlight_tag = database.highlight_tags
         t_tag = database.Tag.__table__
         t_document = database.Document.__table__
-        # Join with tags a second time to find highlights that match the
-        # given path, while returning all tags for those highlights
         t_highlight_tag_m = database.highlight_tags.alias()
         t_tag_m = database.Tag.__table__.alias()
         query = (
@@ -86,7 +102,7 @@ def _get_highlights_for_export(db, project_id, path):
                 t_highlight.c.id,
                 t_highlight.c.snippet,
                 t_document.c.name,
-                t_tag.c.path,
+                t_tag.c.id,
             ])
             .select_from(
                 t_highlight
@@ -120,9 +136,6 @@ def _get_highlights_for_export(db, project_id, path):
             )
         )
     else:
-        # Special case to select all highlights: we also need to select
-        # highlights that have no tag at all, so the startswith() condition
-        # would not work
         t_highlight = database.Highlight.__table__
         t_highlight_tag = database.highlight_tags
         t_tag = database.Tag.__table__
@@ -132,7 +145,7 @@ def _get_highlights_for_export(db, project_id, path):
                 t_highlight.c.id,
                 t_highlight.c.snippet,
                 t_document.c.name,
-                t_tag.c.path,
+                t_tag.c.id,
             ])
             .select_from(
                 t_highlight
@@ -159,15 +172,28 @@ def _get_highlights_for_export(db, project_id, path):
 
     highlights = []
     for row in db.execute(query).fetchall():
-        highlight_id, snippet, document, tag_path = row
+        highlight_id, snippet, document, tag_id = row
+        tag_obj = tags_by_id.get(tag_id) if tag_id is not None else None
+        tag_info = (
+            ExportTagInfo(
+                id=tag_obj.id,
+                path=tag_obj.path,
+                full_path=tag_obj.full_path(),
+                description=tag_obj.description,
+            )
+            if tag_obj
+            else None
+        )
+
         if highlights and highlights[-1][0] == highlight_id:
-            highlights[-1][3].append(tag_path)
+            if tag_info:
+                highlights[-1][3].append(tag_info)
         else:
             highlights.append((
                 highlight_id,
                 snippet,
                 document,
-                [] if tag_path is None else [tag_path],
+                [] if tag_info is None else [tag_info],
             ))
 
     return highlights
@@ -186,48 +212,71 @@ def get_filename_for_highlights_export(path):
 def highlights_csv(db, project_id, path, file):
     """Export highlights to a CSV file.
     """
-    highlights = _get_highlights_for_export(db, project_id, path)
-    writer = csv.writer(file)
-    writer.writerow(['id', 'document', 'tag', 'content'])
-    for id, snippet, document, tags in highlights:
-        if not tags:
-            tags = ['']
-        for tag_path in tags:
-            writer.writerow([
-                id, document, tag_path,
-                convert.html_to_plaintext(snippet),
-            ])
+    with contextlib.ExitStack() as stack:
+        if not hasattr(file, 'write'):
+            file = stack.enter_context(open(file, 'w', encoding='utf-8', newline=''))
+        highlights = _get_highlights_for_export(db, project_id, path)
+        writer = csv.writer(file)
+        writer.writerow(['id', 'document', 'tag', 'tag_path', 'tag_note', 'content'])
+        for id, snippet, document, tags in highlights:
+            content = convert.html_to_plaintext(snippet)
+            if not tags:
+                writer.writerow([id, document, '', '', '', content])
+            else:
+                for tag in tags:
+                    writer.writerow([
+                        id,
+                        document,
+                        tag.path,
+                        tag.full_path,
+                        tag.description,
+                        content,
+                    ])
 
 
 @tracer.start_as_current_span('taguette/export/highlights_xlsx')
 def highlights_xslx(db, project_id, path, filename):
-    """Export highlights to an Excel file.
+    """Export highlights to an Excel file with wrapped text and header-calibrated column widths.
     """
     highlights = _get_highlights_for_export(db, project_id, path)
 
     workbook = xlsxwriter.Workbook(filename)
     sheet = workbook.add_worksheet('highlights')
 
-    header = workbook.add_format({'bold': True})
+    header_format = workbook.add_format({'bold': True, 'text_wrap': True})
+    cell_format = workbook.add_format({'text_wrap': True, 'valign': 'top'})
 
-    sheet.write(0, 0, 'id', header)
-    sheet.write(0, 1, 'document', header)
-    sheet.write(0, 2, 'tag', header)
-    sheet.write(0, 3, 'content', header)
-    sheet.set_column(0, 0, 5.0)
-    sheet.set_column(1, 1, 15.0)
-    sheet.set_column(2, 2, 15.0)
-    sheet.set_column(3, 3, 80.0)
+    headers = ['id', 'document', 'tag', 'tag_path', 'tag_note', 'content']
+    for col, h in enumerate(headers):
+        sheet.write(0, col, h, header_format)
+
+    sheet.set_column(0, 0, 8.0, cell_format)
+    sheet.set_column(1, 1, 20.0, cell_format)
+    sheet.set_column(2, 2, 20.0, cell_format)
+    sheet.set_column(3, 3, 30.0, cell_format)
+    sheet.set_column(4, 4, 30.0, cell_format)
+    sheet.set_column(5, 5, 50.0, cell_format)
+
     row = 1
     for id, snippet, document, tags in highlights:
+        content = convert.html_to_plaintext(snippet)
         if not tags:
-            tags = ['']
-        for tag_path in tags:
-            sheet.write(row, 0, str(id))
-            sheet.write(row, 1, document)
-            sheet.write(row, 2, tag_path)
-            sheet.write(row, 3, convert.html_to_plaintext(snippet))
+            sheet.write(row, 0, str(id), cell_format)
+            sheet.write(row, 1, document, cell_format)
+            sheet.write(row, 2, '', cell_format)
+            sheet.write(row, 3, '', cell_format)
+            sheet.write(row, 4, '', cell_format)
+            sheet.write(row, 5, content, cell_format)
             row += 1
+        else:
+            for tag in tags:
+                sheet.write(row, 0, str(id), cell_format)
+                sheet.write(row, 1, document, cell_format)
+                sheet.write(row, 2, tag.path, cell_format)
+                sheet.write(row, 3, tag.full_path, cell_format)
+                sheet.write(row, 4, tag.description, cell_format)
+                sheet.write(row, 5, content, cell_format)
+                row += 1
     workbook.close()
 
 
@@ -406,3 +455,268 @@ async def codebook_document(tags, ext, *, config, locale):
     )
     contents = await contents
     return mimetype, contents
+
+
+def _build_tree(tags):
+    """Constrói estrutura de árvore hierárquica em memória."""
+    nodes_by_id = {tag.id: {'tag': tag, 'children': []} for tag in tags}
+    root_nodes = []
+    for tag in tags:
+        if tag.parent_id and tag.parent_id in nodes_by_id:
+            nodes_by_id[tag.parent_id]['children'].append(nodes_by_id[tag.id])
+        else:
+            root_nodes.append(nodes_by_id[tag.id])
+    return root_nodes
+
+
+@tracer.start_as_current_span('taguette/export/codebook_tree_html')
+def codebook_tree_html(project, tags):
+    """Gera um arquivo HTML independente com a árvore hierárquica e busca."""
+    tree_nodes = _build_tree(tags)
+    template = template_env.get_template('export_codebook_tree.html')
+    return template.render(
+        project=project,
+        tree_nodes=tree_nodes,
+        tags=tags,
+    )
+
+
+@tracer.start_as_current_span('taguette/export/highlights_ontotext_csv')
+def highlights_ontotext_csv(db, project, file):
+    """Exporta matriz para Ontotext Refine com notas dinâmicas."""
+    with contextlib.ExitStack() as stack:
+        if not hasattr(file, 'write'):
+            file = stack.enter_context(open(file, 'w', encoding='utf-8', newline=''))
+
+        tags = sorted(project.tags, key=lambda t: t.path.lower())
+        tags_with_notes = set(
+            tag.id for tag in tags if tag.description and tag.description.strip()
+        )
+
+        header = ['id', 'document']
+        for tag in tags:
+            clean_col = tag.path.replace(' ', '_')
+            header.append(clean_col)
+            if tag.id in tags_with_notes:
+                header.append(f"{clean_col}_note")
+
+        writer = csv.writer(file)
+        writer.writerow(header)
+
+        highlights = (
+            db.query(database.Highlight)
+            .join(database.Document)
+            .filter(database.Document.project_id == project.id)
+            .options(joinedload(database.Highlight.tags), joinedload(database.Highlight.document))
+            .order_by(database.Highlight.document_id, database.Highlight.start_offset)
+            .all()
+        )
+
+        for hl in highlights:
+            content = convert.html_to_plaintext(hl.snippet)
+            row = [hl.id, hl.document.name]
+            hl_tag_ids = {t.id for t in hl.tags}
+            for tag in tags:
+                if tag.id in hl_tag_ids:
+                    row.append(content)
+                    if tag.id in tags_with_notes:
+                        row.append(tag.description)
+                else:
+                    row.append('')
+                    if tag.id in tags_with_notes:
+                        row.append('')
+            writer.writerow(row)
+
+
+@tracer.start_as_current_span('taguette/export/ontotext_mapping_json')
+def ontotext_mapping_json(project, tags):
+    """Gera a configuração mapping.json para o Ontotext Refine."""
+    import json
+
+    tags_with_notes = set(
+        tag.id for tag in tags if tag.description and tag.description.strip()
+    )
+
+    subject_mappings = []
+
+    # 1. Mapeamento de Classes e Hierarquias (owl:Class, rdfs:subClassOf, rdfs:comment)
+    for tag in tags:
+        clean_name = tag.path.replace(' ', '_')
+        prop_mappings = []
+
+        if tag.parent is not None:
+            parent_clean = tag.parent.path.replace(' ', '_')
+            prop_mappings.append({
+                "property": {
+                    "transformation": {"expression": "rdfs", "language": "prefix"},
+                    "valueSource": {"source": "constant", "constant": "subClassOf"}
+                },
+                "values": [{
+                    "transformation": {"expression": "", "language": "prefix"},
+                    "valueSource": {"source": "constant", "constant": parent_clean},
+                    "valueType": {"propertyMappings": [], "type": "iri", "typeMappings": []}
+                }]
+            })
+
+        if tag.id in tags_with_notes:
+            prop_mappings.append({
+                "property": {
+                    "transformation": {"expression": "rdfs", "language": "prefix"},
+                    "valueSource": {"source": "constant", "constant": "comment"}
+                },
+                "values": [{
+                    "transformation": {"expression": "", "language": "prefix"},
+                    "valueSource": {"source": "constant", "constant": tag.description},
+                    "valueType": {
+                        "type": "datatype_literal",
+                        "datatype": {
+                            "transformation": {"expression": "xsd", "language": "prefix"},
+                            "valueSource": {"source": "constant", "constant": "string"}
+                        }
+                    }
+                }]
+            })
+
+        subject_mappings.append({
+            "propertyMappings": prop_mappings,
+            "subject": {
+                "transformation": {"expression": "", "language": "prefix"},
+                "valueSource": {"source": "constant", "constant": clean_name}
+            },
+            "typeMappings": [{
+                "transformation": {"expression": "owl", "language": "prefix"},
+                "valueSource": {"source": "constant", "constant": "Class"}
+            }]
+        })
+
+    # 2. Mapeamento dos trechos de destaque (instâncias por linha com dcterms:description)
+    for tag in tags:
+        clean_name = tag.path.replace(' ', '_')
+        prop_mappings = [
+            {
+                "property": {
+                    "transformation": {"expression": "dcterms", "language": "prefix"},
+                    "valueSource": {"source": "constant", "constant": "description"}
+                },
+                "values": [{
+                    "valueSource": {"columnName": clean_name, "source": "column"},
+                    "valueType": {
+                        "type": "datatype_literal",
+                        "datatype": {
+                            "transformation": {"expression": "xsd", "language": "prefix"},
+                            "valueSource": {"source": "constant", "constant": "string"}
+                        }
+                    }
+                }]
+            }
+        ]
+
+        if tag.id in tags_with_notes:
+            note_col = f"{clean_name}_note"
+            prop_mappings.append({
+                "property": {
+                    "transformation": {"expression": "rdfs", "language": "prefix"},
+                    "valueSource": {"source": "constant", "constant": "comment"}
+                },
+                "values": [{
+                    "valueSource": {"columnName": note_col, "source": "column"},
+                    "valueType": {
+                        "type": "datatype_literal",
+                        "datatype": {
+                            "transformation": {"expression": "xsd", "language": "prefix"},
+                            "valueSource": {"source": "constant", "constant": "string"}
+                        }
+                    }
+                }]
+            })
+
+        subject_mappings.append({
+            "propertyMappings": prop_mappings,
+            "subject": {
+                "transformation": {
+                    "expression": f'if(isNonBlank(cells["{clean_name}"].value), "{clean_name}_" + rowIndex, null)',
+                    "language": "grel"
+                },
+                "valueSource": {"source": "row_index"}
+            },
+            "typeMappings": [{
+                "transformation": {"expression": "", "language": "prefix"},
+                "valueSource": {"source": "constant", "constant": clean_name}
+            }]
+        })
+
+    mapping = {
+        "baseIRI": "http://researchproject.org/base/",
+        "namespaces": {
+            "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "owl": "http://www.w3.org/2002/07/owl#",
+            "xsd": "http://www.w3.org/2001/XMLSchema#",
+            "dcterms": "http://purl.org/dc/terms/",
+            "": "http://researchproject.org/resource/"
+        },
+        "subjectMappings": subject_mappings
+    }
+    return json.dumps(mapping, indent=2, ensure_ascii=False)
+
+
+@tracer.start_as_current_span('taguette/export/codebook_and_highlights_ttl')
+def codebook_and_highlights_ttl(db, project, file):
+    """Exporta o projeto em sintaxe Turtle (.ttl / RDF) para GraphDB/Protégé."""
+    with contextlib.ExitStack() as stack:
+        if not hasattr(file, 'write'):
+            file = stack.enter_context(open(file, 'w', encoding='utf-8'))
+
+        lines = [
+            "@prefix : <http://researchproject.org/resource/> .",
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .",
+            "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .",
+            "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .",
+            "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .",
+            "@prefix dcterms: <http://purl.org/dc/terms/> .",
+            "",
+            "# --- Taxonomia de Classes e Categorias ---",
+            "",
+        ]
+
+        def escape_ttl_literal(s):
+            if not s:
+                return ""
+            return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
+
+        for tag in project.tags:
+            clean_name = tag.path.replace(' ', '_')
+            lines.append(f":{clean_name} a owl:Class ;")
+            lines.append(f'    rdfs:label "{escape_ttl_literal(tag.path)}" ;')
+            if tag.parent:
+                parent_clean = tag.parent.path.replace(' ', '_')
+                lines.append(f"    rdfs:subClassOf :{parent_clean} ;")
+            if tag.description:
+                lines.append(f'    rdfs:comment "{escape_ttl_literal(tag.description)}"^^xsd:string ;')
+            lines[-1] = lines[-1][:-2] + " .\n"
+
+        lines.append("\n# --- Instâncias de Destaques (Highlights) ---\n")
+
+        highlights = (
+            db.query(database.Highlight)
+            .join(database.Document)
+            .filter(database.Document.project_id == project.id)
+            .options(joinedload(database.Highlight.tags), joinedload(database.Highlight.document))
+            .all()
+        )
+
+        for hl in highlights:
+            content = convert.html_to_plaintext(hl.snippet)
+            escaped_content = escape_ttl_literal(content)
+            doc_name = escape_ttl_literal(hl.document.name)
+            for tag in hl.tags:
+                clean_name = tag.path.replace(' ', '_')
+                inst_uri = f":{clean_name}_hl_{hl.id}"
+                lines.append(f"{inst_uri} a :{clean_name} ;")
+                lines.append(f'    dcterms:description "{escaped_content}"^^xsd:string ;')
+                lines.append(f'    dcterms:source "{doc_name}"^^xsd:string ;')
+                if tag.description:
+                    lines.append(f'    rdfs:comment "{escape_ttl_literal(tag.description)}"^^xsd:string ;')
+                lines[-1] = lines[-1][:-2] + " .\n"
+
+        file.write("\n".join(lines))

@@ -324,3 +324,69 @@ class ExportSqlite(BaseHandler):
                         break
                     await self.flush()
                 return await self.finish()
+
+
+class ExportCodebookTreeHtml(BaseHandler):
+    PROM_EXPORT.labels('codebook', 'html').inc(0)
+
+    @authenticated
+    def get(self, project_id):
+        PROM_EXPORT.labels('codebook', 'html').inc()
+        project, _ = self.get_project(project_id)
+        tags = list(project.tags)
+        html = export.codebook_tree_html(project, tags)
+        self.set_header('Content-Type', 'text/html; charset=utf-8')
+        self.set_header('Content-Disposition',
+                        'attachment; filename="codebook_tree.html"')
+        return self.finish(html)
+
+
+class ExportOntotextCsv(BaseHandler):
+    PROM_EXPORT.labels('ontotext', 'csv').inc(0)
+
+    @authenticated
+    def get(self, project_id):
+        PROM_EXPORT.labels('ontotext', 'csv').inc()
+        project, _ = self.get_project(project_id)
+        self.set_header('Content-Type', 'text/csv; charset=utf-8')
+        self.set_header('Content-Disposition',
+                        'attachment; filename="ontotext_refine.csv"')
+        export.highlights_ontotext_csv(
+            self.db,
+            project,
+            WriteAdapter(self.write),
+        )
+        return self.finish()
+
+
+class ExportOntotextMappingJson(BaseHandler):
+    PROM_EXPORT.labels('ontotext', 'json').inc(0)
+
+    @authenticated
+    def get(self, project_id):
+        PROM_EXPORT.labels('ontotext', 'json').inc()
+        project, _ = self.get_project(project_id)
+        tags = list(project.tags)
+        mapping = export.ontotext_mapping_json(project, tags)
+        self.set_header('Content-Type', 'application/json; charset=utf-8')
+        self.set_header('Content-Disposition',
+                        'attachment; filename="mapping.json"')
+        return self.finish(mapping)
+
+
+class ExportCodebookTtl(BaseHandler):
+    PROM_EXPORT.labels('codebook', 'ttl').inc(0)
+
+    @authenticated
+    def get(self, project_id):
+        PROM_EXPORT.labels('codebook', 'ttl').inc()
+        project, _ = self.get_project(project_id)
+        self.set_header('Content-Type', 'text/turtle; charset=utf-8')
+        self.set_header('Content-Disposition',
+                        'attachment; filename="codebook.ttl"')
+        export.codebook_and_highlights_ttl(
+            self.db,
+            project,
+            WriteAdapter(self.write),
+        )
+        return self.finish()
