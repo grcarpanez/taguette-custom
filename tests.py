@@ -804,6 +804,7 @@ class TestMultiuser(MyHTTPTestCase):
                         "1": {
                             "count": 0, "id": 1, "path": "interesting",
                             "description": "Further review required",
+                            "parent_id": None,
                         },
                     },
                     sort_keys=True),
@@ -836,7 +837,8 @@ class TestMultiuser(MyHTTPTestCase):
         self.assertEqual(
             await poll_proj2,
             {'type': 'tag_add', 'id': 1, 'tag_id': 3,
-             'tag_path': 'people', 'description': "People of interest"})
+             'tag_path': 'people', 'description': "People of interest",
+             'parent_id': None})
         poll_proj2 = await self.poll_event(2, 1)
 
         async with self.apost(
@@ -847,7 +849,8 @@ class TestMultiuser(MyHTTPTestCase):
         self.assertEqual(
             await poll_proj2,
             {'type': 'tag_add', 'id': 2, 'tag_id': 4,
-             'tag_path': 'interesting\\places', 'description': ''})
+             'tag_path': 'interesting\\places', 'description': '',
+             'parent_id': None})
         poll_proj2 = await self.poll_event(2, 2)
 
         # Create document 1 in project 1
@@ -1300,10 +1303,10 @@ class TestMultiuser(MyHTTPTestCase):
             self.assertEqual(
                 await response.text(),
                 textwrap.dedent('''\
-                id,document,tag,content
-                2,otherdoc,interesting\\places,diff
-                3,otherdoc,interesting,tent
-                3,otherdoc,people,tent
+                id,document,tag,tag_path,tag_note,content
+                2,otherdoc,interesting\\places,interesting\\places,,diff
+                3,otherdoc,interesting,interesting,Further review required,tent
+                3,otherdoc,people,people,People of interest,tent
                 ''').replace('\n', '\r\n'),
             )
 
@@ -1315,8 +1318,8 @@ class TestMultiuser(MyHTTPTestCase):
             self.assertEqual(
                 await response.text(),
                 textwrap.dedent('''\
-                id,document,tag,content
-                2,otherdoc,interesting\\places,diff
+                id,document,tag,tag_path,tag_note,content
+                2,otherdoc,interesting\\places,interesting\\places,,diff
                 ''').replace('\n', '\r\n'),
             )
 
@@ -1815,13 +1818,13 @@ class TestMultiuser(MyHTTPTestCase):
                 (30, 'db1user', 3, -3, {'type': 'document_delete'}),
                 (31, 'db1user', 3, None,
                  {'type': 'tag_add', 'description': '', 'tag_id': 7,
-                  'tag_path': 'db2tag11'}),
+                  'tag_path': 'db2tag11', 'parent_id': None}),
                 (32, 'db1user', 3, None,
                  {'type': 'tag_add', 'description': '', 'tag_id': -3,
-                  'tag_path': 'db2tagF'}),
+                  'tag_path': 'db2tagF', 'parent_id': None}),
                 (33, 'db1user', 3, None,
                  {'type': 'tag_add', 'description': '', 'tag_id': 8,
-                  'tag_path': 'db2tag12'}),
+                  'tag_path': 'db2tag12', 'parent_id': None}),
                 (34, 'db1user', 3, None, {'type': 'tag_delete', 'tag_id': -3}),
                 (35, 'db1user', 3, 7,
                  {'type': 'highlight_add', 'highlight_id': 7,
@@ -1853,12 +1856,12 @@ class TestMultiuser(MyHTTPTestCase):
         self.assertRowsEqualsExceptDates(
             db1.execute(database.Tag.__table__.select()),
             [
-                (1, 1, 'db1tag11', ''),
-                (2, 1, 'db1tag12', ''),
-                (4, 2, 'db1tag21', ''),
-                (5, 2, 'db1tag22', ''),
-                (7, 3, 'db2tag11', ''),
-                (8, 3, 'db2tag12', ''),
+                (1, 1, None, 'db1tag11', ''),
+                (2, 1, None, 'db1tag12', ''),
+                (4, 2, None, 'db1tag21', ''),
+                (5, 2, None, 'db1tag22', ''),
+                (7, 3, None, 'db2tag11', ''),
+                (8, 3, None, 'db2tag12', ''),
             ],
         )
         self.assertRowsEqualsExceptDates(
@@ -1970,13 +1973,13 @@ class TestMultiuser(MyHTTPTestCase):
                 (4, 'admin', 1, -6, {'type': 'document_delete'}),
                 (5, 'admin', 1, None,
                  {'type': 'tag_add', 'description': '', 'tag_id': 1,
-                  'tag_path': 'db1tag21'}),
+                  'tag_path': 'db1tag21', 'parent_id': None}),
                 (6, 'admin', 1, None,
                  {'type': 'tag_add', 'description': '', 'tag_id': -6,
-                  'tag_path': 'db1tagF'}),
+                  'tag_path': 'db1tagF', 'parent_id': None}),
                 (7, 'admin', 1, None,
                  {'type': 'tag_add', 'description': '', 'tag_id': 2,
-                  'tag_path': 'db1tag22'}),
+                  'tag_path': 'db1tag22', 'parent_id': None}),
                 (8, 'admin', 1, None,
                  {'type': 'tag_delete', 'tag_id': -6}),
                 (9, 'admin', 1, 1,
@@ -2011,8 +2014,8 @@ class TestMultiuser(MyHTTPTestCase):
                 .order_by(database.Tag.__table__.c.id)
             ),
             [
-                (1, 1, 'db1tag21', ''),
-                (2, 1, 'db1tag22', ''),
+                (1, 1, None, 'db1tag21', ''),
+                (2, 1, None, 'db1tag22', ''),
             ],
         )
         self.assertRowsEqualsExceptDates(
@@ -2022,6 +2025,8 @@ class TestMultiuser(MyHTTPTestCase):
             ),
             [(1, 2), (2, 1)],
         )
+        db2.close()
+        db2.get_bind().dispose()
 
     # The codebook import tests are split into the "read" tests (post CSV file,
     # get HTML form) and the "import" tests (submit form, database updates)
@@ -2259,6 +2264,7 @@ class TestMultiuser(MyHTTPTestCase):
                 ('admin', 1, None, {
                     'type': 'tag_add', 'tag_id': 2,
                     'tag_path': 'people', 'description': 'new',
+                    'parent_id': None,
                 }),
             ],
         )
@@ -2313,10 +2319,12 @@ class TestMultiuser(MyHTTPTestCase):
                 ('admin', 1, None, {
                     'type': 'tag_add', 'tag_id': 1,
                     'tag_path': 'interesting', 'description': 'yes replace',
+                    'parent_id': None,
                 }),
                 ('admin', 1, None, {
                     'type': 'tag_add', 'tag_id': 2,
                     'tag_path': 'people', 'description': 'new',
+                    'parent_id': None,
                 }),
             ],
         )
@@ -2337,6 +2345,313 @@ class TestMultiuser(MyHTTPTestCase):
         fut = asyncio.ensure_future(self._poll_event(proj, from_id))
         await asyncio.sleep(0.2)  # Give time for the request to be sent
         return fut
+
+    async def do_login(self, login='admin', password='hackme'):
+        async with self.apost('/cookies', data=dict()) as response:
+            pass
+        async with self.aget('/login') as response:
+            pass
+        async with self.apost(
+            '/login',
+            data=dict(next='/', login=login, password=password),
+        ) as response:
+            self.assertEqual(response.status, 303)
+
+    @gen_test
+    async def test_tag_hierarchy_validation_and_crud(self):
+        # 1. Login admin
+        await self.do_login('admin', 'hackme')
+
+        # 2. Create project
+        async with self.apost(
+            '/project/new',
+            data=dict(name='Hierarchy Test', description='Test project for tag hierarchy'),
+        ) as response:
+            self.assertEqual(response.status, 303)
+            proj_id = 1
+
+        # 3. Test validation: pipe symbol '|' must be rejected
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Animais | Mamiferos', description='Invalid with pipe'),
+        ) as response:
+            self.assertEqual(response.status, 400)
+            err = await response.json()
+            self.assertIn("|", err['error'])
+
+        # 4. Create root tag "Animais"
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Animais', description='Reino animal'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            tag_animais = (await response.json())['id']
+
+        # 5. Create subtag "Mamiferos" with parent_id
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Mamiferos', parent_id=tag_animais, description='Classe mamíferos'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            tag_mamiferos = (await response.json())['id']
+
+        # 6. Create subtag "Felinos" with parent_id
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Felinos', parent_id=tag_mamiferos, description='Família felidae'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            tag_felinos = (await response.json())['id']
+
+        # Check full paths in DB
+        db = self.application.DBSession()
+        t1 = db.query(database.Tag).get(tag_animais)
+        t2 = db.query(database.Tag).get(tag_mamiferos)
+        t3 = db.query(database.Tag).get(tag_felinos)
+        self.assertEqual(t1.full_path(), 'Animais')
+        self.assertEqual(t2.full_path(), 'Animais | Mamiferos')
+        self.assertEqual(t3.full_path(), 'Animais | Mamiferos | Felinos')
+        db.close()
+
+        # 7. Cycle prevention in TagUpdate
+        # Cannot be its own parent
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/{tag_animais}',
+            json=dict(parent_id=tag_animais),
+        ) as response:
+            self.assertEqual(response.status, 400)
+            err = await response.json()
+            self.assertEqual(err['error'], "Tag cannot be its own parent")
+
+        # Cannot be child of its own descendant (Animais -> parent = Felinos)
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/{tag_animais}',
+            json=dict(parent_id=tag_felinos),
+        ) as response:
+            self.assertEqual(response.status, 400)
+            err = await response.json()
+            self.assertEqual(err['error'], "Tag cannot be a child of its own descendant")
+
+        # 8. Re-parenting: Move Felinos directly under Animais
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/{tag_felinos}',
+            json=dict(parent_id=tag_animais),
+        ) as response:
+            self.assertEqual(response.status, 200)
+
+        db = self.application.DBSession()
+        t3 = db.query(database.Tag).get(tag_felinos)
+        self.assertEqual(t3.full_path(), 'Animais | Felinos')
+        db.close()
+
+    @gen_test
+    async def test_tag_delete_promote_and_cascade(self):
+        await self.do_login('admin', 'hackme')
+
+        async with self.apost(
+            '/project/new',
+            data=dict(name='Delete Test', description='Test delete promote/cascade'),
+        ) as response:
+            self.assertEqual(response.status, 303)
+            proj_id = 1
+
+        # Tree: Root -> Mid -> Leaf
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Root', description=''),
+        ) as response:
+            root_id = (await response.json())['id']
+
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Mid', parent_id=root_id, description=''),
+        ) as response:
+            mid_id = (await response.json())['id']
+
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Leaf', parent_id=mid_id, description=''),
+        ) as response:
+            leaf_id = (await response.json())['id']
+
+        # Delete 'Mid' with promote: 'Leaf' should be reparented to 'Root'
+        async with self.adelete(
+            f'/api/project/{proj_id}/tag/{mid_id}?action=promote'
+        ) as response:
+            self.assertEqual(response.status, 204)
+
+        db = self.application.DBSession()
+        self.assertIsNone(db.query(database.Tag).get(mid_id))
+        leaf = db.query(database.Tag).get(leaf_id)
+        self.assertIsNotNone(leaf)
+        self.assertEqual(leaf.parent_id, root_id)
+        self.assertEqual(leaf.full_path(), 'Root | Leaf')
+        db.close()
+
+        # Delete 'Root' with cascade: 'Root' and 'Leaf' should both be deleted
+        async with self.adelete(
+            f'/api/project/{proj_id}/tag/{root_id}?action=cascade'
+        ) as response:
+            self.assertEqual(response.status, 204)
+
+        db = self.application.DBSession()
+        self.assertIsNone(db.query(database.Tag).get(root_id))
+        self.assertIsNone(db.query(database.Tag).get(leaf_id))
+        db.close()
+
+    @gen_test
+    async def test_tag_merge_reparent_and_descriptions(self):
+        await self.do_login('admin', 'hackme')
+
+        async with self.apost(
+            '/project/new',
+            data=dict(name='Merge Test', description='Test tag merge'),
+        ) as response:
+            self.assertEqual(response.status, 303)
+            proj_id = 1
+
+        # Tag Source ("Src", desc="Source desc") with child ("ChildOfSrc")
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Src', description='Source desc'),
+        ) as response:
+            src_id = (await response.json())['id']
+
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='ChildOfSrc', parent_id=src_id, description='Child desc'),
+        ) as response:
+            child_id = (await response.json())['id']
+
+        # Tag Dest ("Dest", desc="Dest desc")
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Dest', description='Dest desc'),
+        ) as response:
+            dest_id = (await response.json())['id']
+
+        # Merge Src into Dest with preserve_description=True
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/merge',
+            json=dict(src=src_id, dest=dest_id, preserve_description=True),
+        ) as response:
+            self.assertEqual(response.status, 200)
+
+        db = self.application.DBSession()
+        self.assertIsNone(db.query(database.Tag).get(src_id))
+        dest = db.query(database.Tag).get(dest_id)
+        self.assertEqual(dest.description, 'Dest desc; Source desc')
+        child = db.query(database.Tag).get(child_id)
+        self.assertIsNotNone(child)
+        self.assertEqual(child.parent_id, dest_id)
+        self.assertEqual(child.full_path(), 'Dest | ChildOfSrc')
+        db.close()
+
+    @gen_test
+    async def test_semantic_and_tree_exports(self):
+        await self.do_login('admin', 'hackme')
+
+        async with self.apost(
+            '/project/new',
+            data=dict(name='Semantic Export Test', description='Test semantic exports'),
+        ) as response:
+            self.assertEqual(response.status, 303)
+            proj_id = 1
+
+        # Create tag A with description
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='A', description='A note description'),
+        ) as response:
+            tag_a = (await response.json())['id']
+
+        # Create subtag B under A with empty description
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='B', parent_id=tag_a, description=''),
+        ) as response:
+            tag_b = (await response.json())['id']
+
+        # Add document (using .html to bypass external Calibre dependency)
+        async with self.apost(
+            f'/api/project/{proj_id}/document/new',
+            data=dict(name='doc1', description=''),
+            files=dict(
+                file=('doc1.html', 'text/html', b'<p>Hello world semantic testing data here.</p>'),
+            ),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            doc_id = (await response.json())['created']
+
+        # Add highlights
+        async with self.apost(
+            f'/api/project/{proj_id}/document/{doc_id}/highlight/new',
+            json=dict(start_offset=0, end_offset=11, tags=[tag_a, tag_b]),
+        ) as response:
+            self.assertEqual(response.status, 200)
+
+        # 1. Test codebook_tree.html
+        async with self.aget(f'/project/{proj_id}/export/codebook_tree.html') as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers['Content-Type'], 'text/html; charset=utf-8')
+            html = await response.text()
+            self.assertIn('A note description', html)
+            self.assertIn('A', html)
+            self.assertIn('B', html)
+            self.assertIn('Livro de Códigos Interativo', html)
+
+        # 2. Test ontotext.csv
+        async with self.aget(f'/project/{proj_id}/export/ontotext.csv') as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers['Content-Type'], 'text/csv; charset=utf-8')
+            csv_text = await response.text()
+            lines = [line.strip() for line in csv_text.splitlines() if line.strip()]
+            header = lines[0].split(',')
+            self.assertIn('A', header)
+            self.assertIn('A_note', header)
+            self.assertIn('B', header)
+            self.assertNotIn('B_note', header)  # B has empty description, so no B_note!
+
+        # 3. Test ontotext_mapping.json
+        async with self.aget(f'/project/{proj_id}/export/ontotext_mapping.json') as response:
+            self.assertEqual(response.status, 200)
+            self.assertTrue(response.headers['Content-Type'].startswith('application/json'))
+            mapping = json.loads(await response.text())
+            self.assertIn('namespaces', mapping)
+            self.assertIn('owl', mapping['namespaces'])
+            self.assertIn('rdfs', mapping['namespaces'])
+            self.assertIn('dcterms', mapping['namespaces'])
+            # Check subClassOf relation between B and A
+            json_str = json.dumps(mapping)
+            self.assertIn('"constant": "subClassOf"', json_str)
+            self.assertIn('A_note', json_str)
+
+        # 4. Test codebook.ttl
+        async with self.aget(f'/project/{proj_id}/export/codebook.ttl') as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers['Content-Type'], 'text/turtle; charset=utf-8')
+            ttl_text = await response.text()
+            self.assertIn('@prefix owl:', ttl_text)
+            self.assertIn('@prefix rdfs:', ttl_text)
+            self.assertIn('rdfs:subClassOf', ttl_text)
+            self.assertIn('A note description', ttl_text)
+
+        # 5. Test highlights.csv and highlights.xlsx
+        async with self.aget(f'/project/{proj_id}/export/highlights/.csv') as response:
+            self.assertEqual(response.status, 200)
+            csv_text = await response.text()
+            self.assertIn('id,document,tag,tag_path,tag_note,content', csv_text)
+            self.assertIn('A note description', csv_text)
+            self.assertIn('A | B', csv_text)
+
+        async with self.aget(f'/project/{proj_id}/export/highlights/.xlsx') as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(
+                response.headers['Content-Type'],
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+            content = await response.read()
+            self.assertTrue(len(content) > 0)
 
 
 class TestSingleuser(MyHTTPTestCase):
