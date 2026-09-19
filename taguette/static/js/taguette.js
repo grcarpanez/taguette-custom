@@ -1039,6 +1039,12 @@ $(tag_add_modal).on('shown.bs.modal', function() {
   document.getElementById('tag-add-path').focus();
 });
 
+$(tag_add_modal).on('hidden.bs.modal', function() {
+  if($('#highlight-add-modal').hasClass('show')) {
+    $('body').addClass('modal-open');
+  }
+});
+
 function populateTagParentSelect(selectedParentId, disabledTagId) {
   var select = document.getElementById('tag-add-parent');
   select.innerHTML = '<option value="">' + gettext("(None - Root Tag)") + '</option>';
@@ -1601,21 +1607,66 @@ function updateModalTagsList() {
     for(var m = 0; m < matches.length; ++m) {
       var matchTag = matches[m];
       var isChecked = highlightSelectedTags[matchTag.id] && !highlightSelectedTags[matchTag.id].excluded;
+      var matchChildren = getTagChildren(matchTag.id);
+
       var li = document.createElement('li');
-      li.className = 'tag-name form-check py-1 border-bottom';
-      li.innerHTML =
+      li.className = 'tag-name form-check py-1 border-bottom d-flex align-items-center justify-content-between';
+
+      var leftDiv = document.createElement('div');
+      leftDiv.className = 'd-flex align-items-center flex-grow-1 text-truncate';
+      leftDiv.innerHTML =
         '<input type="checkbox" class="form-check-input" value="' + matchTag.id + '" name="highlight-add-tags" id="highlight-add-tags-' + matchTag.id + '" ' + (isChecked ? 'checked' : '') + ' />' +
-        '<label for="highlight-add-tags-' + matchTag.id + '" class="form-check-label d-flex justify-content-between align-items-center w-100">' +
+        '<label for="highlight-add-tags-' + matchTag.id + '" class="form-check-label text-truncate mb-0 ml-1">' +
         '  <span><strong>' + escapeHtml(matchTag.path) + '</strong> <small class="text-muted ml-1">(' + escapeHtml(getTagFullPath(matchTag.id)) + ')</small></span>' +
         '</label>';
 
       (function(t) {
-        var cb = li.querySelector('input');
+        var cb = leftDiv.querySelector('input');
         cb.addEventListener('change', function() {
           toggleHighlightSelectedTag(t.id, this.checked);
         });
       })(matchTag);
 
+      li.appendChild(leftDiv);
+
+      var actionsDiv = document.createElement('div');
+      actionsDiv.className = 'd-flex align-items-center flex-shrink-0 ml-2';
+
+      var addSubBtn = document.createElement('button');
+      addSubBtn.type = 'button';
+      addSubBtn.className = 'btn btn-xs btn-outline-success py-0 px-2 mr-1';
+      addSubBtn.title = gettext("Criar subtag nesta categoria");
+      addSubBtn.innerHTML = '<i class="fa fa-plus"></i>';
+      (function(tid) {
+        addSubBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          createSubtag(tid);
+        });
+      })(matchTag.id);
+      actionsDiv.appendChild(addSubBtn);
+
+      var folderBtn = document.createElement('button');
+      folderBtn.type = 'button';
+      folderBtn.className = matchChildren.length > 0
+        ? 'btn btn-sm btn-outline-info py-0 px-2'
+        : 'btn btn-sm btn-outline-secondary py-0 px-2';
+      folderBtn.innerHTML = matchChildren.length > 0
+        ? '<i class="fa fa-folder-open"></i> ' + matchChildren.length + ' subtags'
+        : '<i class="fa fa-folder"></i> 0 subtags';
+      folderBtn.title = matchChildren.length > 0
+        ? gettext("Entrar na pasta de subtags")
+        : gettext("Entrar na pasta desta tag (vazia)");
+      (function(folderId) {
+        folderBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          highlightNavFolder = folderId;
+          document.getElementById('highlight-search').value = '';
+          updateModalTagsList();
+        });
+      })(matchTag.id);
+      actionsDiv.appendChild(folderBtn);
+
+      li.appendChild(actionsDiv);
       tags_modal_list.appendChild(li);
     }
     return;
@@ -1659,23 +1710,44 @@ function updateModalTagsList() {
 
     rowLi.appendChild(leftDiv);
 
-    if(children.length > 0) {
-      var folderBtn = document.createElement('button');
-      folderBtn.type = 'button';
-      folderBtn.className = 'btn btn-sm btn-outline-info py-0 px-2 ml-2 flex-shrink-0';
-      folderBtn.innerHTML = '<i class="fa fa-folder-open"></i> ' + children.length + ' subtags';
-      folderBtn.title = gettext("Entrar na pasta de subtags");
-      (function(folderId) {
-        folderBtn.addEventListener('click', function(e) {
-          e.preventDefault();
-          highlightNavFolder = folderId;
-          document.getElementById('highlight-search').value = '';
-          updateModalTagsList();
-        });
-      })(tagItem.id);
-      rowLi.appendChild(folderBtn);
-    }
+    var actionsDiv = document.createElement('div');
+    actionsDiv.className = 'd-flex align-items-center flex-shrink-0 ml-2';
 
+    var addSubBtn = document.createElement('button');
+    addSubBtn.type = 'button';
+    addSubBtn.className = 'btn btn-xs btn-outline-success py-0 px-2 mr-1';
+    addSubBtn.title = gettext("Criar subtag nesta categoria");
+    addSubBtn.innerHTML = '<i class="fa fa-plus"></i>';
+    (function(tid) {
+      addSubBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        createSubtag(tid);
+      });
+    })(tagItem.id);
+    actionsDiv.appendChild(addSubBtn);
+
+    var folderBtn = document.createElement('button');
+    folderBtn.type = 'button';
+    folderBtn.className = children.length > 0
+      ? 'btn btn-sm btn-outline-info py-0 px-2'
+      : 'btn btn-sm btn-outline-secondary py-0 px-2';
+    folderBtn.innerHTML = children.length > 0
+      ? '<i class="fa fa-folder-open"></i> ' + children.length + ' subtags'
+      : '<i class="fa fa-folder"></i> 0 subtags';
+    folderBtn.title = children.length > 0
+      ? gettext("Entrar na pasta de subtags")
+      : gettext("Entrar na pasta desta tag (vazia)");
+    (function(folderId) {
+      folderBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        highlightNavFolder = folderId;
+        document.getElementById('highlight-search').value = '';
+        updateModalTagsList();
+      });
+    })(tagItem.id);
+    actionsDiv.appendChild(folderBtn);
+
+    rowLi.appendChild(actionsDiv);
     tags_modal_list.appendChild(rowLi);
   }
 }
