@@ -894,6 +894,10 @@ function mergeTags(tag_src, tag_dest) {
 }
 
 function updateTagsList() {
+  var stickyPane = document.querySelector('div.sticky-top');
+  var prevPaneScroll = stickyPane ? stickyPane.scrollTop : 0;
+  var prevWindowScroll = window.scrollY || document.documentElement.scrollTop;
+
   while(tags_list.firstChild) {
     var first = tags_list.firstChild;
     if(first.classList && first.classList.contains('special-item-button')) {
@@ -933,13 +937,23 @@ function updateTagsList() {
       var isExpanded = expandedTagNodes.has(tag.id);
       toggleBtn.innerHTML = isExpanded ? '<i class="fa fa-caret-down"></i>' : '<i class="fa fa-caret-right"></i>';
       toggleBtn.addEventListener('click', function(e) {
+        e.preventDefault();
         e.stopPropagation();
+        var childUl = li.querySelector(':scope > ul');
         if(expandedTagNodes.has(tag.id)) {
           expandedTagNodes.delete(tag.id);
+          toggleBtn.innerHTML = '<i class="fa fa-caret-right"></i>';
+          if(childUl) {
+            childUl.style.display = 'none';
+          }
         } else {
           expandedTagNodes.add(tag.id);
+          toggleBtn.innerHTML = '<i class="fa fa-caret-down"></i>';
+          if(childUl) {
+            childUl.style.display = 'block';
+          }
+          li.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-        updateTagsList();
       });
       left.appendChild(toggleBtn);
     } else {
@@ -970,9 +984,12 @@ function updateTagsList() {
     container.appendChild(li);
     linkTag(a, tag.path);
 
-    if(children.length > 0 && expandedTagNodes.has(tag.id)) {
+    if(children.length > 0) {
       var childUl = document.createElement('ul');
       childUl.className = 'list-unstyled mb-0';
+      if(!expandedTagNodes.has(tag.id)) {
+        childUl.style.display = 'none';
+      }
       for(var i = 0; i < children.length; ++i) {
         renderTreeNode(children[i], depth + 1, childUl);
       }
@@ -993,6 +1010,11 @@ function updateTagsList() {
       renderTreeNode(rootTags[i], 0, tags_list);
     }
   }
+
+  if(stickyPane) {
+    stickyPane.scrollTop = prevPaneScroll;
+  }
+  window.scrollTo(0, prevWindowScroll);
 
   updateModalTagsList();
 
