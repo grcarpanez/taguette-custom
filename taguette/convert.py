@@ -279,6 +279,49 @@ def is_html_safe(text):
     )
 
 
+def get_calibre_convert():
+    """Locate the ebook-convert executable.
+
+    Checks:
+    1. CALIBRE environment variable if explicitly set
+    2. System PATH
+    3. Common installation paths on Windows and macOS
+    """
+    if os.environ.get('CALIBRE'):
+        candidate = os.path.join(os.environ['CALIBRE'], 'ebook-convert')
+        if sys.platform == 'win32' and not candidate.lower().endswith('.exe'):
+            candidate_exe = candidate + '.exe'
+            if os.path.isfile(candidate_exe):
+                return candidate_exe
+        return candidate
+
+    candidate = shutil.which('ebook-convert')
+    if candidate:
+        return candidate
+
+    if sys.platform == 'win32':
+        candidates = [
+            r'C:\Program Files\Calibre2\ebook-convert.exe',
+            r'C:\Program Files (x86)\Calibre2\ebook-convert.exe',
+            os.path.expandvars(r'%LOCALAPPDATA%\Programs\Calibre2\ebook-convert.exe'),
+        ]
+        pf = os.environ.get('ProgramFiles')
+        if pf:
+            candidates.append(os.path.join(pf, 'Calibre2', 'ebook-convert.exe'))
+        pf86 = os.environ.get('ProgramFiles(x86)')
+        if pf86:
+            candidates.append(os.path.join(pf86, 'Calibre2', 'ebook-convert.exe'))
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+    elif sys.platform == 'darwin':
+        mac_path = '/Applications/calibre.app/Contents/MacOS/ebook-convert'
+        if os.path.isfile(mac_path):
+            return mac_path
+
+    return 'ebook-convert'
+
+
 @tracer.start_as_current_span('taguette/convert/calibre_to_html')
 @prom_async_time(PROM_CALIBRE_TOHTML_TIME)
 async def calibre_to_html(input_filename, temp_dir, config):
@@ -286,9 +329,7 @@ async def calibre_to_html(input_filename, temp_dir, config):
 
     output_dir = os.path.join(temp_dir, 'output')
     output = []
-    convert = 'ebook-convert'
-    if os.environ.get('CALIBRE'):
-        convert = os.path.join(os.environ['CALIBRE'], convert)
+    convert = get_calibre_convert()
     cmd = [convert, input_filename, output_dir]
 
     def run_calibre(cmd):
@@ -552,9 +593,7 @@ async def calibre_from_html(html, extension, config):
         with open(input_filename, 'w', encoding='utf-8') as fp:
             fp.write(html)
         output_filename = os.path.join(tmp, 'output.%s' % extension)
-        convert = 'ebook-convert'
-        if os.environ.get('CALIBRE'):
-            convert = os.path.join(os.environ['CALIBRE'], convert)
+        convert = get_calibre_convert()
         cmd = [convert, input_filename, output_filename,
                '--page-breaks-before=/']
         logger.info("Running: %s", ' '.join(cmd))

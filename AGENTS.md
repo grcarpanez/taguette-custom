@@ -56,7 +56,7 @@ Qualquer incremento deve respeitar fielmente a arquitetura existente, evitando a
 ### 3.1 Ambiente de Desenvolvimento Local (Windows / PowerShell)
 - **Interpretador:** Python 3.10 (invocado preferencialmente via `py -3.10`).
 - **Isolamento:** Execução estritamente vinculada ao Poetry: `py -3.10 -m poetry run <comando>`.
-- **Dependência Externa Calibre:** Deve estar instalado e o caminho acessível via variável de ambiente `$env:CALIBRE = "C:\Program Files\Calibre2"`.
+- **Dependência Externa Calibre:** Deve estar instalado. O Taguette detecta automaticamente caminhos padrões (ex: `C:\Program Files\Calibre2`), ou via variável de ambiente `$env:CALIBRE` em caso de instalação customizada.
 
 ### 3.2 Isolamento e Blindagem do Repositório Git
 Para assegurar que nenhum código, teste ou documentação interna seja inadvertidamente publicado no repositório original do Taguette:

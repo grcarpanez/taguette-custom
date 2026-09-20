@@ -26,6 +26,17 @@ Installation
 
 You can find complete installation instructions on `our website <https://www.taguette.org/install.html>`__, including installers for Windows and MacOS.
 
+External Dependencies
+---------------------
+
+Taguette requires `Calibre <https://calibre-ebook.com/>`__ (specifically the ``ebook-convert`` utility) to convert imported documents (such as PDF, DOCX, and EPUB) to HTML and to export documents:
+
+* **Windows:** Download and install Calibre from `calibre-ebook.com <https://calibre-ebook.com/>`__ (or via ``winget install Calibre.Calibre``). Taguette automatically detects Calibre in standard installation paths (such as ``C:\Program Files\Calibre2``).
+* **macOS:** Download from `calibre-ebook.com <https://calibre-ebook.com/>`__ (or install via Homebrew: ``brew install --cask calibre``).
+* **Linux:** Install through your system package manager (e.g. ``sudo apt install calibre``).
+
+*Note: If Calibre is installed in a custom location, you can set the ``CALIBRE`` environment variable to point to that directory.*
+
 Development setup from the repository
 -------------------------------------
 
