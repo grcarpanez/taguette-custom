@@ -246,17 +246,42 @@ def _build_highlights_table(db, project_id, path, include_notes=True, only_popul
                         content,
                     ])
 
-    if not only_populated:
-        all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
-        if path:
-            all_tags_q = all_tags_q.filter(database.Tag.path.startswith(path))
-        all_tags = all_tags_q.order_by(database.Tag.path).all()
-        for tag in all_tags:
-            if tag.id not in used_tag_ids:
-                if include_notes:
-                    rows.append(['', '', tag.path, tag.full_path(), tag.description or '', ''])
-                else:
-                    rows.append(['', '', tag.path, tag.full_path(), ''])
+    all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
+    if path:
+        all_tags_q = all_tags_q.filter(database.Tag.path.startswith(path))
+    all_tags = all_tags_q.order_by(database.Tag.path).all()
+
+    all_project_tags = {
+        tag.id: tag
+        for tag in db.query(database.Tag).filter(database.Tag.project_id == project_id).all()
+    }
+
+    # Identificar ancestrais de tags com destaques (para não deixar "filhas de fantasmas")
+    ancestor_ids = set()
+    for t_id in used_tag_ids:
+        curr = all_project_tags.get(t_id)
+        while curr and curr.parent_id:
+            parent = all_project_tags.get(curr.parent_id)
+            if parent:
+                ancestor_ids.add(parent.id)
+                curr = parent
+            else:
+                break
+
+    if only_populated:
+        # Se only_populated for True, as tags sem destaques diretos que possuem filhos populados (ancestrais)
+        # DEVEM ser incluídas como linhas de referência para preservar a hierarquia completa
+        extra_tag_ids = ancestor_ids - used_tag_ids
+    else:
+        # Se only_populated for False, todas as tags não utilizadas são incluídas
+        extra_tag_ids = {tag.id for tag in all_tags} - used_tag_ids
+
+    for tag in all_tags:
+        if tag.id in extra_tag_ids:
+            if include_notes:
+                rows.append(['', '', tag.path, tag.full_path(), tag.description or '', ''])
+            else:
+                rows.append(['', '', tag.path, tag.full_path(), ''])
 
     return headers, rows
 
@@ -293,23 +318,48 @@ def _build_highlights_table_transposed(db, project_id, path, include_notes=True,
                         tag.description,
                     ])
 
-    if not only_populated:
-        all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
-        if path:
-            all_tags_q = all_tags_q.filter(database.Tag.path.startswith(path))
-        all_tags = all_tags_q.order_by(database.Tag.path).all()
-        for tag in all_tags:
-            if tag.id not in used_tag_ids:
-                columns.append(['', '', tag.path, tag.full_path(), ''])
-                if include_notes and tag.description and tag.id not in notes_added:
-                    notes_added.add(tag.id)
-                    columns.append([
-                        '',
-                        '',
-                        f"{tag.path}_note",
-                        '',
-                        tag.description,
-                    ])
+    all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
+    if path:
+        all_tags_q = all_tags_q.filter(database.Tag.path.startswith(path))
+    all_tags = all_tags_q.order_by(database.Tag.path).all()
+
+    all_project_tags = {
+        tag.id: tag
+        for tag in db.query(database.Tag).filter(database.Tag.project_id == project_id).all()
+    }
+
+    # Identificar ancestrais de tags com destaques (para não deixar "filhas de fantasmas")
+    ancestor_ids = set()
+    for t_id in used_tag_ids:
+        curr = all_project_tags.get(t_id)
+        while curr and curr.parent_id:
+            parent = all_project_tags.get(curr.parent_id)
+            if parent:
+                ancestor_ids.add(parent.id)
+                curr = parent
+            else:
+                break
+
+    if only_populated:
+        # Se only_populated for True, as tags sem destaques diretos que possuem filhos populados (ancestrais)
+        # DEVEM ser incluídas com colunas dedicadas para permitir a importação no Ontotext Refine
+        extra_tag_ids = ancestor_ids - used_tag_ids
+    else:
+        # Se only_populated for False, todas as tags não utilizadas são incluídas
+        extra_tag_ids = {tag.id for tag in all_tags} - used_tag_ids
+
+    for tag in all_tags:
+        if tag.id in extra_tag_ids:
+            columns.append(['', '', tag.path, tag.full_path(), ''])
+            if include_notes and tag.description and tag.id not in notes_added:
+                notes_added.add(tag.id)
+                columns.append([
+                    '',
+                    '',
+                    f"{tag.path}_note",
+                    '',
+                    tag.description,
+                ])
 
     return headers, columns
 

@@ -2824,6 +2824,81 @@ class TestMultiuser(MyHTTPTestCase):
             text = await response.text()
             self.assertNotIn('rdfs:comment', text)
 
+        # 7. Test ancestor tags with populated descendants when only_populated=true
+        # Hierarchy: Pai > Filho > Neto (only Neto has highlights)
+        # Unpopulated isolated: IsoladoSemDestaque (no highlights, no children)
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Pai', description='Descricao Pai'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            tag_pai = (await response.json())['id']
+
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Filho', parent_id=tag_pai, description='Descricao Filho'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            tag_filho = (await response.json())['id']
+
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='Neto', parent_id=tag_filho, description='Descricao Neto'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            tag_neto = (await response.json())['id']
+
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='IsoladoSemDestaque', description='Isolado'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            tag_isolado = (await response.json())['id']
+
+        # Add highlight strictly to Neto
+        async with self.apost(
+            f'/api/project/{proj_id}/document/{doc_id}/highlight/new',
+            json=dict(start_offset=12, end_offset=17, tags=[tag_neto]),
+        ) as response:
+            self.assertEqual(response.status, 200)
+
+        # highlights.csv?only_populated=true: Pai and Filho MUST be present; IsoladoSemDestaque MUST NOT
+        async with self.aget(f'/project/{proj_id}/export/highlights/.csv?only_populated=true') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertIn(',,Pai,Pai,Descricao Pai,', text)
+            self.assertIn(',,Filho,Pai | Filho,Descricao Filho,', text)
+            self.assertIn('Neto', text)
+            self.assertNotIn('IsoladoSemDestaque', text)
+
+        # highlights.csv?transposed=true&only_populated=true: tag row must contain Pai, Filho, Neto; not IsoladoSemDestaque
+        async with self.aget(f'/project/{proj_id}/export/highlights/.csv?transposed=true&only_populated=true') as response:
+            self.assertEqual(response.status, 200)
+            lines = (await response.text()).strip().split('\r\n')
+            if len(lines) == 1:
+                lines = lines[0].split('\n')
+            tag_row = lines[2].split(',')
+            self.assertIn('Pai', tag_row)
+            self.assertIn('Filho', tag_row)
+            self.assertIn('Neto', tag_row)
+            self.assertNotIn('IsoladoSemDestaque', tag_row)
+            # Check note columns exist for Pai and Filho
+            self.assertIn('Pai_note', tag_row)
+            self.assertIn('Filho_note', tag_row)
+
+        # highlights.xlsx?transposed=true&only_populated=true
+        async with self.aget(f'/project/{proj_id}/export/highlights/.xlsx?transposed=true&only_populated=true') as response:
+            self.assertEqual(response.status, 200)
+            xlsx_bytes = await response.read()
+            with zipfile.ZipFile(io.BytesIO(xlsx_bytes)) as z:
+                sheet_xml = z.read('xl/worksheets/sheet1.xml').decode('utf-8')
+                shared_strings = z.read('xl/sharedStrings.xml').decode('utf-8')
+                self.assertIn('Pai', shared_strings)
+                self.assertIn('Filho', shared_strings)
+                self.assertIn('Neto', shared_strings)
+                self.assertNotIn('IsoladoSemDestaque', shared_strings)
+
+
 
 class TestSingleuser(MyHTTPTestCase):
     def get_app(self):

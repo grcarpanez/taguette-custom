@@ -2,8 +2,8 @@
 
 Este documento é a bússola operacional do projeto. Ele deve ser consultado e atualizado obrigatoriamente a cada ciclo de entrega para registrar onde estamos, o que já foi concluído e para onde devemos ir.
 
-**Última Atualização:** 19/09/2026  
-**Status Atual:** Fase 2 Concluída com 100% de Sucesso nos Testes Automatizados  
+**Última Atualização:** 20/09/2026  
+**Status Atual:** Fase 2 Concluída e Refinada com 100% de Sucesso nos Testes Automatizados (37/37 OK)  
 **Responsável Técnico:** Antigravity AI & Desenvolvedor  
 
 ---
@@ -11,7 +11,7 @@ Este documento é a bússola operacional do projeto. Ele deve ser consultado e a
 ## 1. Visão Geral do Progresso
 
 | Macro-Fase | Descrição Resumida | Status | Progresso |
-| :--- | :--- | :---: | :---: |
+| :--- | :--- | :--- | :---: |
 | **Fase 0** | Governança, Diretrizes de Agentes (`AGENTS.md`), Blindagem Git e Setup | **Concluído** | 100% |
 | **Fase 1** | Especificação Funcional do Sistema (`docs/FSD.md`) e Mapeamento de Incrementos | **Concluído** | 100% |
 | **Fase 2** | Desenvolvimento do Incremento (Hierarquia, Exportações e Ontotext) | **Concluído** | 100% |
@@ -65,13 +65,18 @@ Este documento é a bússola operacional do projeto. Ele deve ser consultado e a
   - Planilha matricial Ontotext Refine (`/project/<id>/export/ontotext.csv`) com colunas `<tag>_note` dinâmicas (apenas se preenchidas).
   - Gerador de mapeamento semântico `mapping.json` Ontotext Refine (`/project/<id>/export/ontotext_mapping.json`) com `owl:Class`, `rdfs:subClassOf`, `dcterms:description` e `rdfs:comment`.
   - Exportação direta em Turtle RDF (`/project/<id>/export/codebook.ttl`).
+  - Exportação transposta de destaques (matriz para Ontotext / Modelo Aba 2) com metadados verticais e tratamento de fórmulas no XlsxWriter (`strings_to_formulas: False`).
+  - Preservação obrigatória de classes ancestrais com descendentes populados até a raiz na exportação de destaques (`INC-001`), eliminando erros de colunas inexistentes no Ontotext Refine ao importar `mapping.json`.
 - [x] Frontend:
   - Árvore lateral recursiva com setas expansíveis (`▶ / ▼`) e botão rápido `➕ Subtag`.
   - Painel de destaques exibindo cabeçalho da categoria, full path, anotação e cards de subtags.
   - Modal de marcação com Trilha de Pastas (*Breadcrumbs*), criação contextual de subtags e Barra de Chips com Estado Duplo (1 clique desmarca/risca em vermelho; 2 cliques salta para a pasta da tag com rolagem suave).
   - Modais com pré-visualização "Antes e Depois" para reorganização de galhos e mescla.
+  - Correção de ancoragem de dropdowns de exportação à direita com `data-display="static"`.
+- [x] Detecção do Sistema:
+  - Auto-detecção de caminhos padrão do Calibre no Windows (`C:\Program Files\Calibre2`) e macOS em `taguette/convert.py`.
 - [x] Testes automatizados na suíte completa (`py -3.10 -m poetry run python tests.py`):
-  - **36 testes executados e aprovados com 100% de sucesso (OK).**
+  - **37 testes executados e aprovados com 100% de sucesso (OK).**
 
 ---
 
@@ -86,6 +91,6 @@ Este documento é a bússola operacional do projeto. Ele deve ser consultado e a
 
 ## 3. Próximos Passos Imediatos
 
-1. **Apresentação do Walkthrough ao Usuário:** Apresentar o resumo das entregas e instrução de testes manuais.
+1. **Apresentação do Walkthrough ao Usuário:** Apresentar a correção das classes ancestrais populadas e instrução de testes.
 2. **Git Commit e Push:** Commitar as alterações em `pt-BR` de acordo com Conventional Commits e sincronizar com o repositório remoto `origin/master`.
-3. **Planejamento da Fase 3:** Iniciar o levantamento de requisitos de criptografia em repouso e endurecimento de segurança.
+3. **Início da Fase 3:** Avançar para a implementação de segurança, cookies e criptografia conforme planejado.
