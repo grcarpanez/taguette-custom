@@ -51,6 +51,8 @@
               {% trans %}Export codebook{% endtrans %}
             </button>
             <div class="dropdown-menu" aria-labelledby="dropdown-codebook">
+              <a href="#" class="dropdown-item font-weight-bold text-primary" id="btn-open-export-codebook-modal" onclick="openExportCodebookModal(); return false;"><i class="fa fa-sliders mr-1"></i> {% trans %}Configurar e Exportar...{% endtrans %}</a>
+              <div class="dropdown-divider"></div>
               <a href="{{ reverse_url('export_codebook_tree_html', project.id) }}" class="dropdown-item">{% trans %}Interactive HTML (Árvore){% endtrans %}</a>
               <a href="{{ reverse_url('export_codebook_ttl', project.id) }}" class="dropdown-item">{% trans %}Turtle RDF (.ttl){% endtrans %}</a>
               <a href="{{ reverse_url('export_ontotext_csv', project.id) }}" class="dropdown-item">{% trans %}Ontotext Refine (CSV){% endtrans %}</a>
@@ -121,14 +123,16 @@
     <div id="document-view" class="document-view">
       <div id="export-button" class="dropdown" style="display: none;">
         <button class="btn btn-outline-primary dropdown-toggle" type="button" id="dropdown-export" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-          {% trans %}Export this view{% endtrans %}
+          {% trans %}Export highlights{% endtrans %}
         </button>
         <div class="dropdown-menu" aria-labelledby="dropdown-export">
+          <a href="#" class="dropdown-item font-weight-bold text-primary" id="btn-open-export-highlights-modal" onclick="openExportHighlightsModal(); return false;"><i class="fa fa-sliders mr-1"></i> {% trans %}Configurar e Exportar...{% endtrans %}</a>
+          <div class="dropdown-divider" id="dropdown-export-divider"></div>
+          <a href="#" class="dropdown-item" data-extension="xlsx" data-document="false">{% trans %}Excel{% endtrans %}</a>
+          <a href="#" class="dropdown-item" data-extension="csv" data-document="false">{% trans %}CSV{% endtrans %}</a>
           <a href="#" class="dropdown-item" data-extension="html">{% trans %}HTML{% endtrans %}</a>
           <a href="#" class="dropdown-item" data-extension="docx">{% trans %}DOCX{% endtrans %}</a>
           <a href="#" class="dropdown-item" data-extension="pdf">{% trans %}PDF{% endtrans %}</a>
-          <a href="#" class="dropdown-item" data-extension="xlsx" data-document="false">{% trans %}Excel{% endtrans %}</a>
-          <a href="#" class="dropdown-item" data-extension="csv" data-document="false">{% trans %}CSV{% endtrans %}</a>
         </div>
       </div>
 
@@ -481,6 +485,117 @@
       <div class="modal-footer">
         <button type="button" id="btn-reparent-confirm" class="btn btn-primary">{% trans %}Confirmar Mudança{% endtrans %}</button>
         <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans %}Voltar{% endtrans %}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Export Codebook Modal -->
+<div class="modal" id="export-codebook-modal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa fa-book text-primary mr-2"></i>{% trans %}Export Codebook{% endtrans %}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group mb-3">
+          <label class="font-weight-bold d-block mb-1">{% trans %}Escopo das Tags:{% endtrans %}</label>
+          <div class="custom-control custom-radio mb-1">
+            <input type="radio" id="codebook-scope-all" name="codebook-scope" class="custom-control-input" value="all" checked>
+            <label class="custom-control-label" for="codebook-scope-all">{% trans %}Todas as tags do projeto{% endtrans %}</label>
+          </div>
+          <div class="custom-control custom-radio">
+            <input type="radio" id="codebook-scope-populated" name="codebook-scope" class="custom-control-input" value="populated">
+            <label class="custom-control-label" for="codebook-scope-populated">{% trans %}Apenas tags populadas (com destaques vinculados e seus ancestrais){% endtrans %}</label>
+          </div>
+        </div>
+
+        <div class="form-group mb-3">
+          <label class="font-weight-bold d-block mb-1">{% trans %}Comentários e Anotações:{% endtrans %}</label>
+          <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="codebook-include-notes" checked>
+            <label class="custom-control-label" for="codebook-include-notes">{% trans %}Incluir anotações e descrições conceituais (description / rdfs:comment / tag_note){% endtrans %}</label>
+          </div>
+          <small class="text-muted d-block mt-1">{% trans %}Desmarque para suprimir colunas de anotação e descrições na exportação.{% endtrans %}</small>
+        </div>
+
+        <div class="form-group mb-2">
+          <label for="codebook-export-format" class="font-weight-bold mb-1">{% trans %}Formato do Arquivo:{% endtrans %}</label>
+          <select class="form-control" id="codebook-export-format">
+            <option value="tree_html">{% trans %}Interactive HTML (Árvore Hierárquica){% endtrans %}</option>
+            <option value="ttl">{% trans %}Turtle RDF (.ttl / Ontologia OWL){% endtrans %}</option>
+            <option value="ontotext_csv">{% trans %}Ontotext Refine (CSV com notas dinâmicas){% endtrans %}</option>
+            <option value="ontotext_json">{% trans %}Ontotext Mapping (JSON para GraphDB){% endtrans %}</option>
+            <option value="xlsx">{% trans %}Excel (.xlsx){% endtrans %}</option>
+            <option value="csv">{% trans %}CSV (.csv){% endtrans %}</option>
+            <option value="docx">{% trans %}Word (.docx){% endtrans %}</option>
+            <option value="pdf">{% trans %}PDF (.pdf){% endtrans %}</option>
+            <option value="html">{% trans %}HTML (.html){% endtrans %}</option>
+            <option value="qdc">{% trans %}QDC (XML){% endtrans %}</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans %}Cancelar{% endtrans %}</button>
+        <button type="button" id="btn-execute-export-codebook" class="btn btn-primary" onclick="executeExportCodebook();"><i class="fa fa-download mr-1"></i> {% trans %}Baixar Codebook{% endtrans %}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Export Highlights Modal -->
+<div class="modal" id="export-highlights-modal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa fa-highlighter text-primary mr-2"></i>{% trans %}Export highlights{% endtrans %}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group mb-3">
+          <label class="font-weight-bold d-block mb-1">{% trans %}Escopo dos Destaques:{% endtrans %}</label>
+          <div class="custom-control custom-radio mb-1" id="highlights-scope-current-wrap">
+            <input type="radio" id="highlights-scope-current" name="highlights-scope" class="custom-control-input" value="current" checked>
+            <label class="custom-control-label" for="highlights-scope-current" id="highlights-scope-current-label">{% trans %}Destaques da tag atual na visualização{% endtrans %}</label>
+          </div>
+          <div class="custom-control custom-radio mb-1">
+            <input type="radio" id="highlights-scope-all" name="highlights-scope" class="custom-control-input" value="all">
+            <label class="custom-control-label" for="highlights-scope-all">{% trans %}Todos os destaques do projeto{% endtrans %}</label>
+          </div>
+          <div class="custom-control custom-checkbox ml-4 mt-1" id="highlights-unpopulated-wrap">
+            <input type="checkbox" class="custom-control-input" id="highlights-include-unpopulated">
+            <label class="custom-control-label small text-muted" for="highlights-include-unpopulated">{% trans %}Incluir também tags sem destaques vinculados (linhas vazias na planilha){% endtrans %}</label>
+          </div>
+        </div>
+
+        <div class="form-group mb-3">
+          <label class="font-weight-bold d-block mb-1">{% trans %}Anotações / Descrições conceituais:{% endtrans %}</label>
+          <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="highlights-include-notes" checked>
+            <label class="custom-control-label" for="highlights-include-notes">{% trans %}Incluir coluna tag_note / descrições das tags{% endtrans %}</label>
+          </div>
+          <small class="text-muted d-block mt-1">{% trans %}Desmarque para omitir a coluna de anotações e exportar uma planilha mais compacta.{% endtrans %}</small>
+        </div>
+
+        <div class="form-group mb-2">
+          <label for="highlights-export-format" class="font-weight-bold mb-1">{% trans %}Formato do Arquivo:{% endtrans %}</label>
+          <select class="form-control" id="highlights-export-format">
+            <option value="xlsx">{% trans %}Excel (.xlsx){% endtrans %}</option>
+            <option value="csv">{% trans %}CSV (.csv){% endtrans %}</option>
+            <option value="html">{% trans %}Documento HTML (.html){% endtrans %}</option>
+            <option value="docx">{% trans %}Word (.docx){% endtrans %}</option>
+            <option value="pdf">{% trans %}PDF (.pdf){% endtrans %}</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans %}Cancelar{% endtrans %}</button>
+        <button type="button" id="btn-execute-export-highlights" class="btn btn-primary" onclick="executeExportHighlights();"><i class="fa fa-download mr-1"></i> {% trans %}Baixar Destaques{% endtrans %}</button>
       </div>
     </div>
   </div>

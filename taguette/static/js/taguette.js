@@ -2118,8 +2118,18 @@ function loadDocument(document_id) {
 
     // Update export button
     export_button.style.display = '';
+    var btnExport = document.getElementById('dropdown-export');
+    if(btnExport) {
+      btnExport.innerText = gettext("Export document");
+    }
+    var btnConfigHighlights = document.getElementById('btn-open-export-highlights-modal');
+    if(btnConfigHighlights) btnConfigHighlights.style.display = 'none';
+    var divConfigHighlights = document.getElementById('dropdown-export-divider');
+    if(divConfigHighlights) divConfigHighlights.style.display = 'none';
+
     var items = export_button.getElementsByClassName('dropdown-item');
     for(var i = 0; i < items.length; ++i) {
+      if(items[i].id === 'btn-open-export-highlights-modal') continue;
       var ext = items[i].getAttribute('data-extension');
       if(items[i].getAttribute('data-document') !== 'false') {
         items[i].setAttribute(
@@ -2342,8 +2352,18 @@ function loadTag(tag_path, page) {
 
     // Update export button
     export_button.style.display = '';
+    var btnExport = document.getElementById('dropdown-export');
+    if(btnExport) {
+      btnExport.innerText = gettext("Export highlights");
+    }
+    var btnConfigHighlights = document.getElementById('btn-open-export-highlights-modal');
+    if(btnConfigHighlights) btnConfigHighlights.style.display = '';
+    var divConfigHighlights = document.getElementById('dropdown-export-divider');
+    if(divConfigHighlights) divConfigHighlights.style.display = '';
+
     var items = export_button.getElementsByClassName('dropdown-item');
     for(var i = 0; i < items.length; ++i) {
+      if(items[i].id === 'btn-open-export-highlights-modal') continue;
       var ext = items[i].getAttribute('data-extension');
       if(items[i].getAttribute('data-highlights') !== 'false') {
         items[i].setAttribute(
@@ -2531,3 +2551,93 @@ function longPollForEvents() {
   });
 }
 longPollForEvents();
+
+/*
+ * Modais Inteligentes de Exportação (Codebook & Highlights)
+ */
+
+function openExportCodebookModal(format) {
+  if(format) {
+    var select = document.getElementById('codebook-export-format');
+    if(select) select.value = format;
+  }
+  var scopeAll = document.getElementById('codebook-scope-all');
+  if(scopeAll) scopeAll.checked = true;
+  var notes = document.getElementById('codebook-include-notes');
+  if(notes) notes.checked = true;
+
+  $('#export-codebook-modal').modal('show');
+}
+
+function executeExportCodebook() {
+  var format = document.getElementById('codebook-export-format').value;
+  var onlyPopulated = document.getElementById('codebook-scope-populated').checked;
+  var includeNotes = document.getElementById('codebook-include-notes').checked;
+
+  var pathMap = {
+    'tree_html': '/project/' + project_id + '/export/codebook_tree.html',
+    'ttl': '/project/' + project_id + '/export/codebook.ttl',
+    'ontotext_csv': '/project/' + project_id + '/export/ontotext.csv',
+    'ontotext_json': '/project/' + project_id + '/export/ontotext_mapping.json',
+    'xlsx': '/project/' + project_id + '/export/codebook.xlsx',
+    'csv': '/project/' + project_id + '/export/codebook.csv',
+    'docx': '/project/' + project_id + '/export/codebook.docx',
+    'pdf': '/project/' + project_id + '/export/codebook.pdf',
+    'html': '/project/' + project_id + '/export/codebook.html',
+    'qdc': '/project/' + project_id + '/export/codebook.qdc'
+  };
+
+  var targetPath = pathMap[format] || ('/project/' + project_id + '/export/codebook.' + format);
+  var url = base_path + targetPath + '?only_populated=' + onlyPopulated + '&include_notes=' + includeNotes;
+
+  $('#export-codebook-modal').modal('hide');
+  window.location.href = url;
+}
+
+function openExportHighlightsModal(format) {
+  if(format) {
+    var select = document.getElementById('highlights-export-format');
+    if(select) select.value = format;
+  }
+
+  var currentWrap = document.getElementById('highlights-scope-current-wrap');
+  var currentLabel = document.getElementById('highlights-scope-current-label');
+  var currentRadio = document.getElementById('highlights-scope-current');
+  var allRadio = document.getElementById('highlights-scope-all');
+
+  if(current_tag) {
+    if(currentWrap) currentWrap.style.display = '';
+    if(currentLabel) currentLabel.textContent = gettext("Destaques da tag atual na visualização: ") + current_tag;
+    if(currentRadio) currentRadio.checked = true;
+  } else {
+    if(currentWrap) currentWrap.style.display = 'none';
+    if(allRadio) allRadio.checked = true;
+  }
+
+  var notes = document.getElementById('highlights-include-notes');
+  if(notes) notes.checked = true;
+  var unpop = document.getElementById('highlights-include-unpopulated');
+  if(unpop) unpop.checked = false;
+
+  $('#export-highlights-modal').modal('show');
+}
+
+function executeExportHighlights() {
+  var format = document.getElementById('highlights-export-format').value;
+  var scopeElem = document.querySelector('input[name="highlights-scope"]:checked');
+  var scope = scopeElem ? scopeElem.value : 'all';
+  var includeNotes = document.getElementById('highlights-include-notes').checked;
+  var includeUnpopulated = document.getElementById('highlights-include-unpopulated').checked;
+  var onlyPopulated = !includeUnpopulated;
+
+  var tagPart = '';
+  if(scope === 'current' && current_tag) {
+    tagPart = encodeURIComponent(current_tag);
+  }
+
+  var url = base_path + '/project/' + project_id + '/export/highlights/' + tagPart + '.' + format +
+            '?include_notes=' + includeNotes + '&only_populated=' + onlyPopulated;
+
+  $('#export-highlights-modal').modal('hide');
+  window.location.href = url;
+}

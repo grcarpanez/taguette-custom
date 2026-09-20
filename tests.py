@@ -1340,6 +1340,46 @@ class TestMultiuser(MyHTTPTestCase):
                     ''').replace('\n', '\r\n'),
             )
 
+        # Export highlights in project 2 with include_notes=false
+        async with self.aget(
+            '/project/2/export/highlights/interesting.csv?include_notes=false',
+        ) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(
+                await response.text(),
+                textwrap.dedent('''\
+                id,document,tag,tag_path,content
+                2,otherdoc,interesting\\places,interesting\\places,diff
+                3,otherdoc,interesting,interesting,tent
+                3,otherdoc,people,people,tent
+                ''').replace('\n', '\r\n'),
+            )
+
+        # Export codebook of project 2 to CSV with include_notes=false
+        async with self.aget('/project/2/export/codebook.csv?include_notes=false') as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(
+                await response.text(),
+                textwrap.dedent('''\
+                    tag,description,number of highlights,number of documents
+                    interesting,,1,1
+                    people,,2,2
+                    interesting\\places,,1,1
+                    ''').replace('\n', '\r\n'),
+            )
+
+        # Export Ontotext CSV with include_notes=false
+        async with self.aget('/project/2/export/ontotext.csv?include_notes=false') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertNotIn('_note', text)
+
+        # Export Turtle TTL with include_notes=false
+        async with self.aget('/project/2/export/codebook.ttl?include_notes=false') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertNotIn('rdfs:comment', text)
+
         # Export codebook of project 2 to HTML
         async with self.aget('/project/2/export/codebook.html') as response:
             self.assertEqual(response.status, 200)
@@ -2653,6 +2693,66 @@ class TestMultiuser(MyHTTPTestCase):
             content = await response.read()
             self.assertTrue(len(content) > 0)
 
+        # 6. Test parameterized exports (only_populated and include_notes)
+        # Create unpopulated tag C with description
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='C', description='C note unpopulated'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+
+        # codebook.csv?only_populated=true vs false
+        async with self.aget(f'/project/{proj_id}/export/codebook.csv?only_populated=true') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertIn('A,A note description', text)
+            self.assertIn('B,', text)
+            self.assertNotIn('C', text)
+
+        async with self.aget(f'/project/{proj_id}/export/codebook.csv?only_populated=false') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertIn('C,C note unpopulated', text)
+
+        # codebook.csv?include_notes=false
+        async with self.aget(f'/project/{proj_id}/export/codebook.csv?include_notes=false') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertIn('A,,1,1', text)
+            self.assertNotIn('A note description', text)
+
+        # highlights.csv?include_notes=false
+        async with self.aget(f'/project/{proj_id}/export/highlights/.csv?include_notes=false') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertIn('id,document,tag,tag_path,content', text)
+            self.assertNotIn('tag_note', text)
+            self.assertNotIn('A note description', text)
+
+        # highlights.csv?only_populated=false
+        async with self.aget(f'/project/{proj_id}/export/highlights/.csv?only_populated=false') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertIn(',,C,C,C note unpopulated,', text)
+
+        # highlights.csv?only_populated=true
+        async with self.aget(f'/project/{proj_id}/export/highlights/.csv?only_populated=true') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertNotIn(',,C,C', text)
+
+        # ontotext.csv?include_notes=false
+        async with self.aget(f'/project/{proj_id}/export/ontotext.csv?include_notes=false') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertNotIn('A_note', text)
+
+        # codebook.ttl?include_notes=false
+        async with self.aget(f'/project/{proj_id}/export/codebook.ttl?include_notes=false') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertNotIn('rdfs:comment', text)
+
 
 class TestSingleuser(MyHTTPTestCase):
     def get_app(self):
@@ -3381,22 +3481,25 @@ class TestSeleniumMultiuser(SeleniumTest):
         # Check export options for highlights in project 1 under 'interesting'
         await self.s_get('/project/1/highlights/interesting')
         await asyncio.sleep(1)  # Wait for XHR
-        await self.s_click_button('Export this view')
+        try:
+            await self.s_click_button('Export highlights')
+        except Exception:
+            await self.s_click_button('Export this view')
         links = [
             (link.text, self.extract_path(link.get_attribute('href')))
             for link in (
                 self.driver.find_element(By.ID, 'export-button')
                 .find_elements(By.TAG_NAME, 'a')
             )
-            if link.text
+            if link.text and not link.text.startswith('Configurar')
         ]
         export_url = self.base_path + '/project/1/export'
         self.assertEqual(links, [
+            ('Excel', export_url + '/highlights/interesting.xlsx'),
+            ('CSV', export_url + '/highlights/interesting.csv'),
             ('HTML', export_url + '/highlights/interesting.html'),
             ('DOCX', export_url + '/highlights/interesting.docx'),
             ('PDF', export_url + '/highlights/interesting.pdf'),
-            ('Excel', export_url + '/highlights/interesting.xlsx'),
-            ('CSV', export_url + '/highlights/interesting.csv'),
         ])
 
         # Check codebook export options of project 1
@@ -3409,9 +3512,13 @@ class TestSeleniumMultiuser(SeleniumTest):
                 .find_element(By.XPATH, './..')
                 .find_elements(By.TAG_NAME, 'a')
             )
-            if link.text
+            if link.text and not link.text.startswith('Configurar')
         ]
         self.assertEqual(links, [
+            ('Interactive HTML (Árvore)', self.base_path + '/project/1/export/codebook_tree.html'),
+            ('Turtle RDF (.ttl)', self.base_path + '/project/1/export/codebook.ttl'),
+            ('Ontotext Refine (CSV)', self.base_path + '/project/1/export/ontotext.csv'),
+            ('Ontotext Mapping (JSON)', self.base_path + '/project/1/export/ontotext_mapping.json'),
             ('QDC (XML)', self.base_path + '/project/1/export/codebook.qdc'),
             ('Excel', self.base_path + '/project/1/export/codebook.xlsx'),
             ('CSV', self.base_path + '/project/1/export/codebook.csv'),

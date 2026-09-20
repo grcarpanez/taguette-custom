@@ -67,6 +67,54 @@ def return_doc(wrapped):
     return wrapper
 
 
+class ExportTagWrapper(object):
+    """Wrapper para tags que permite customizar campos (ex.: suprimir description)."""
+    def __init__(self, tag, include_notes=True):
+        self._tag = tag
+        self.id = tag.id
+        self.project_id = tag.project_id
+        self.parent_id = tag.parent_id
+        self.parent = tag.parent
+        self.path = tag.path
+        self.description = tag.description if include_notes else ""
+        self.highlights_count = tag.highlights_count
+        self.documents_count = tag.documents_count
+        self.highlights = tag.highlights
+
+    def full_path(self, delimiter=' | '):
+        return self._tag.full_path(delimiter=delimiter)
+
+    def __getattr__(self, name):
+        return getattr(self._tag, name)
+
+
+def get_codebook_tags(project, handler):
+    """Retorna as tags do projeto filtradas e ajustadas conforme parâmetros."""
+    only_populated = handler.get_argument('only_populated', 'false').lower() in ('true', '1', 'yes')
+    include_notes = handler.get_argument('include_notes', 'true').lower() in ('true', '1', 'yes')
+
+    tags = list(project.tags)
+    if only_populated:
+        # Encontrar todas as tags populadas (com highlights vinculados)
+        populated_ids = {t.id for t in tags if t.highlights_count and t.highlights_count > 0}
+        # Incluir todos os ancestrais para manter a integridade da árvore e hierarquia
+        tag_by_id = {t.id: t for t in tags}
+        kept_ids = set()
+        for t_id in populated_ids:
+            curr_id = t_id
+            while curr_id and curr_id in tag_by_id and curr_id not in kept_ids:
+                kept_ids.add(curr_id)
+                curr = tag_by_id[curr_id]
+                curr_id = curr.parent_id
+
+        tags = [t for t in tags if t.id in kept_ids]
+
+    if not include_notes:
+        tags = [ExportTagWrapper(t, include_notes=False) for t in tags]
+
+    return tags
+
+
 class ExportHighlightsCsv(BaseHandler):
     PROM_EXPORT.labels('highlights_doc', 'csv').inc(0)
 
@@ -75,6 +123,8 @@ class ExportHighlightsCsv(BaseHandler):
         PROM_EXPORT.labels('highlights_doc', 'csv').inc()
 
         project, _ = self.get_project(project_id)
+        include_notes = self.get_argument('include_notes', 'true').lower() in ('true', '1', 'yes')
+        only_populated = self.get_argument('only_populated', 'true').lower() in ('true', '1', 'yes')
 
         name = export.get_filename_for_highlights_export(path)
         self.set_header('Content-Type', 'text/csv; charset=utf-8')
@@ -89,6 +139,8 @@ class ExportHighlightsCsv(BaseHandler):
             project.id,
             path,
             WriteAdapter(self.write),
+            include_notes=include_notes,
+            only_populated=only_populated,
         )
         return self.finish()
 
@@ -101,6 +153,8 @@ class ExportHighlightsXlsx(BaseHandler):
         PROM_EXPORT.labels('highlights_doc', 'xls').inc()
 
         project, _ = self.get_project(project_id)
+        include_notes = self.get_argument('include_notes', 'true').lower() in ('true', '1', 'yes')
+        only_populated = self.get_argument('only_populated', 'true').lower() in ('true', '1', 'yes')
 
         name = export.get_filename_for_highlights_export(path)
         self.set_header('Content-Type',
@@ -115,7 +169,14 @@ class ExportHighlightsXlsx(BaseHandler):
         tmp = tempfile.mkdtemp(prefix='taguette_xlsx_')
         try:
             filename = os.path.join(tmp, 'highlights.xlsx')
-            export.highlights_xslx(self.db, project.id, path, filename)
+            export.highlights_xslx(
+                self.db,
+                project.id,
+                path,
+                filename,
+                include_notes=include_notes,
+                only_populated=only_populated,
+            )
             with open(filename, 'rb') as fp:
                 chunk = fp.read(4096)
                 self.write(chunk)
@@ -138,6 +199,7 @@ class ExportHighlightsDoc(BaseHandler):
         PROM_EXPORT.labels('highlights_doc', ext).inc()
 
         project, _ = self.get_project(project_id)
+        include_notes = self.get_argument('include_notes', 'true').lower() in ('true', '1', 'yes')
 
         # Close DB connection to not overflow the connection pool
         self.close_db_connection()
@@ -150,6 +212,7 @@ class ExportHighlightsDoc(BaseHandler):
             ext,
             config=self.application.config,
             locale=self.locale,
+            include_notes=include_notes,
         )
         contents = await contents
         return name, mimetype, contents
@@ -197,7 +260,7 @@ class ExportCodebookXml(BaseHandler):
     def get(self, project_id):
         PROM_EXPORT.labels('codebook', 'qdc').inc()
         project, _ = self.get_project(project_id)
-        tags = list(project.tags)
+        tags = get_codebook_tags(project, self)
         self.set_header('Content-Type', 'text/xml; charset=utf-8')
         self.set_header('Content-Disposition',
                         'attachment; filename="codebook.qdc"')
@@ -213,7 +276,7 @@ class ExportCodebookCsv(BaseHandler):
     def get(self, project_id):
         PROM_EXPORT.labels('codebook', 'csv').inc()
         project, _ = self.get_project(project_id)
-        tags = list(project.tags)
+        tags = get_codebook_tags(project, self)
         self.set_header('Content-Type', 'text/csv; charset=utf-8')
         self.set_header('Content-Disposition',
                         'attachment; filename="codebook.csv"')
@@ -228,7 +291,7 @@ class ExportCodebookXlsx(BaseHandler):
     def get(self, project_id):
         PROM_EXPORT.labels('codebook', 'xls').inc()
         project, _ = self.get_project(project_id)
-        tags = list(project.tags)
+        tags = get_codebook_tags(project, self)
         self.set_header('Content-Type',
                         ('application/vnd.openxmlformats-officedocument.'
                          'spreadsheetml.sheet'))
@@ -261,7 +324,7 @@ class ExportCodebookDoc(BaseHandler):
         ext = ext.lower()
         PROM_EXPORT.labels('codebook', ext).inc()
         project, _ = self.get_project(project_id)
-        tags = list(project.tags)
+        tags = get_codebook_tags(project, self)
 
         # Close DB connection to not overflow the connection pool
         self.close_db_connection()
@@ -333,7 +396,7 @@ class ExportCodebookTreeHtml(BaseHandler):
     def get(self, project_id):
         PROM_EXPORT.labels('codebook', 'html').inc()
         project, _ = self.get_project(project_id)
-        tags = list(project.tags)
+        tags = get_codebook_tags(project, self)
         html = export.codebook_tree_html(project, tags)
         self.set_header('Content-Type', 'text/html; charset=utf-8')
         self.set_header('Content-Disposition',
@@ -348,6 +411,7 @@ class ExportOntotextCsv(BaseHandler):
     def get(self, project_id):
         PROM_EXPORT.labels('ontotext', 'csv').inc()
         project, _ = self.get_project(project_id)
+        tags = get_codebook_tags(project, self)
         self.set_header('Content-Type', 'text/csv; charset=utf-8')
         self.set_header('Content-Disposition',
                         'attachment; filename="ontotext_refine.csv"')
@@ -355,6 +419,7 @@ class ExportOntotextCsv(BaseHandler):
             self.db,
             project,
             WriteAdapter(self.write),
+            tags=tags,
         )
         return self.finish()
 
@@ -366,7 +431,7 @@ class ExportOntotextMappingJson(BaseHandler):
     def get(self, project_id):
         PROM_EXPORT.labels('ontotext', 'json').inc()
         project, _ = self.get_project(project_id)
-        tags = list(project.tags)
+        tags = get_codebook_tags(project, self)
         mapping = export.ontotext_mapping_json(project, tags)
         self.set_header('Content-Type', 'application/json; charset=utf-8')
         self.set_header('Content-Disposition',
@@ -381,6 +446,7 @@ class ExportCodebookTtl(BaseHandler):
     def get(self, project_id):
         PROM_EXPORT.labels('codebook', 'ttl').inc()
         project, _ = self.get_project(project_id)
+        tags = get_codebook_tags(project, self)
         self.set_header('Content-Type', 'text/turtle; charset=utf-8')
         self.set_header('Content-Disposition',
                         'attachment; filename="codebook.ttl"')
@@ -388,5 +454,6 @@ class ExportCodebookTtl(BaseHandler):
             self.db,
             project,
             WriteAdapter(self.write),
+            tags=tags,
         )
         return self.finish()

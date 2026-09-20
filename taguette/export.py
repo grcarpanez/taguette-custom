@@ -209,7 +209,7 @@ def get_filename_for_highlights_export(path):
 
 
 @tracer.start_as_current_span('taguette/export/highlights_csv')
-def highlights_csv(db, project_id, path, file):
+def highlights_csv(db, project_id, path, file, include_notes=True, only_populated=True):
     """Export highlights to a CSV file.
     """
     with contextlib.ExitStack() as stack:
@@ -217,25 +217,55 @@ def highlights_csv(db, project_id, path, file):
             file = stack.enter_context(open(file, 'w', encoding='utf-8', newline=''))
         highlights = _get_highlights_for_export(db, project_id, path)
         writer = csv.writer(file)
-        writer.writerow(['id', 'document', 'tag', 'tag_path', 'tag_note', 'content'])
+        if include_notes:
+            writer.writerow(['id', 'document', 'tag', 'tag_path', 'tag_note', 'content'])
+        else:
+            writer.writerow(['id', 'document', 'tag', 'tag_path', 'content'])
+
+        used_tag_ids = set()
         for id, snippet, document, tags in highlights:
             content = convert.html_to_plaintext(snippet)
             if not tags:
-                writer.writerow([id, document, '', '', '', content])
+                if include_notes:
+                    writer.writerow([id, document, '', '', '', content])
+                else:
+                    writer.writerow([id, document, '', '', content])
             else:
                 for tag in tags:
-                    writer.writerow([
-                        id,
-                        document,
-                        tag.path,
-                        tag.full_path,
-                        tag.description,
-                        content,
-                    ])
+                    used_tag_ids.add(tag.id)
+                    if include_notes:
+                        writer.writerow([
+                            id,
+                            document,
+                            tag.path,
+                            tag.full_path,
+                            tag.description,
+                            content,
+                        ])
+                    else:
+                        writer.writerow([
+                            id,
+                            document,
+                            tag.path,
+                            tag.full_path,
+                            content,
+                        ])
+
+        if not only_populated:
+            all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
+            if path:
+                all_tags_q = all_tags_q.filter(database.Tag.path.startswith(path))
+            all_tags = all_tags_q.order_by(database.Tag.path).all()
+            for tag in all_tags:
+                if tag.id not in used_tag_ids:
+                    if include_notes:
+                        writer.writerow(['', '', tag.path, tag.full_path(), tag.description or '', ''])
+                    else:
+                        writer.writerow(['', '', tag.path, tag.full_path(), ''])
 
 
 @tracer.start_as_current_span('taguette/export/highlights_xlsx')
-def highlights_xslx(db, project_id, path, filename):
+def highlights_xslx(db, project_id, path, filename, include_notes=True, only_populated=True):
     """Export highlights to an Excel file with wrapped text and header-calibrated column widths.
     """
     highlights = _get_highlights_for_export(db, project_id, path)
@@ -246,7 +276,11 @@ def highlights_xslx(db, project_id, path, filename):
     header_format = workbook.add_format({'bold': True, 'text_wrap': True})
     cell_format = workbook.add_format({'text_wrap': True, 'valign': 'top'})
 
-    headers = ['id', 'document', 'tag', 'tag_path', 'tag_note', 'content']
+    if include_notes:
+        headers = ['id', 'document', 'tag', 'tag_path', 'tag_note', 'content']
+    else:
+        headers = ['id', 'document', 'tag', 'tag_path', 'content']
+
     for col, h in enumerate(headers):
         sheet.write(0, col, h, header_format)
 
@@ -254,10 +288,14 @@ def highlights_xslx(db, project_id, path, filename):
     sheet.set_column(1, 1, 20.0, cell_format)
     sheet.set_column(2, 2, 20.0, cell_format)
     sheet.set_column(3, 3, 30.0, cell_format)
-    sheet.set_column(4, 4, 30.0, cell_format)
-    sheet.set_column(5, 5, 50.0, cell_format)
+    if include_notes:
+        sheet.set_column(4, 4, 30.0, cell_format)
+        sheet.set_column(5, 5, 50.0, cell_format)
+    else:
+        sheet.set_column(4, 4, 50.0, cell_format)
 
     row = 1
+    used_tag_ids = set()
     for id, snippet, document, tags in highlights:
         content = convert.html_to_plaintext(snippet)
         if not tags:
@@ -265,23 +303,49 @@ def highlights_xslx(db, project_id, path, filename):
             sheet.write(row, 1, document, cell_format)
             sheet.write(row, 2, '', cell_format)
             sheet.write(row, 3, '', cell_format)
-            sheet.write(row, 4, '', cell_format)
-            sheet.write(row, 5, content, cell_format)
+            if include_notes:
+                sheet.write(row, 4, '', cell_format)
+                sheet.write(row, 5, content, cell_format)
+            else:
+                sheet.write(row, 4, content, cell_format)
             row += 1
         else:
             for tag in tags:
+                used_tag_ids.add(tag.id)
                 sheet.write(row, 0, str(id), cell_format)
                 sheet.write(row, 1, document, cell_format)
                 sheet.write(row, 2, tag.path, cell_format)
                 sheet.write(row, 3, tag.full_path, cell_format)
-                sheet.write(row, 4, tag.description, cell_format)
-                sheet.write(row, 5, content, cell_format)
+                if include_notes:
+                    sheet.write(row, 4, tag.description, cell_format)
+                    sheet.write(row, 5, content, cell_format)
+                else:
+                    sheet.write(row, 4, content, cell_format)
                 row += 1
+
+    if not only_populated:
+        all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
+        if path:
+            all_tags_q = all_tags_q.filter(database.Tag.path.startswith(path))
+        all_tags = all_tags_q.order_by(database.Tag.path).all()
+        for tag in all_tags:
+            if tag.id not in used_tag_ids:
+                sheet.write(row, 0, '', cell_format)
+                sheet.write(row, 1, '', cell_format)
+                sheet.write(row, 2, tag.path, cell_format)
+                sheet.write(row, 3, tag.full_path(), cell_format)
+                if include_notes:
+                    sheet.write(row, 4, tag.description or '', cell_format)
+                    sheet.write(row, 5, '', cell_format)
+                else:
+                    sheet.write(row, 4, '', cell_format)
+                row += 1
+
     workbook.close()
 
 
 @tracer.start_as_current_span('taguette/export/highlights_doc')
-def highlights_doc(db, project_id, path, ext, *, config, locale):
+def highlights_doc(db, project_id, path, ext, *, config, locale, include_notes=True):
     """Export highlights to a text document.
     """
     highlights = _get_highlights_for_export(db, project_id, path)
@@ -291,6 +355,7 @@ def highlights_doc(db, project_id, path, ext, *, config, locale):
         locale,
         path=path,
         highlights=highlights,
+        include_notes=include_notes,
     )
 
     mimetype, contents = convert.html_to(html, ext, config)
@@ -482,13 +547,17 @@ def codebook_tree_html(project, tags):
 
 
 @tracer.start_as_current_span('taguette/export/highlights_ontotext_csv')
-def highlights_ontotext_csv(db, project, file):
+def highlights_ontotext_csv(db, project, file, tags=None):
     """Exporta matriz para Ontotext Refine com notas dinâmicas."""
     with contextlib.ExitStack() as stack:
         if not hasattr(file, 'write'):
             file = stack.enter_context(open(file, 'w', encoding='utf-8', newline=''))
 
-        tags = sorted(project.tags, key=lambda t: t.path.lower())
+        if tags is None:
+            tags = sorted(project.tags, key=lambda t: t.path.lower())
+        else:
+            tags = sorted(tags, key=lambda t: t.path.lower())
+
         tags_with_notes = set(
             tag.id for tag in tags if tag.description and tag.description.strip()
         )
@@ -661,11 +730,15 @@ def ontotext_mapping_json(project, tags):
 
 
 @tracer.start_as_current_span('taguette/export/codebook_and_highlights_ttl')
-def codebook_and_highlights_ttl(db, project, file):
+def codebook_and_highlights_ttl(db, project, file, tags=None):
     """Exporta o projeto em sintaxe Turtle (.ttl / RDF) para GraphDB/Protégé."""
     with contextlib.ExitStack() as stack:
         if not hasattr(file, 'write'):
             file = stack.enter_context(open(file, 'w', encoding='utf-8'))
+
+        if tags is None:
+            tags = project.tags
+        tags_set = {t.id for t in tags}
 
         lines = [
             "@prefix : <http://researchproject.org/resource/> .",
@@ -684,11 +757,11 @@ def codebook_and_highlights_ttl(db, project, file):
                 return ""
             return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
 
-        for tag in project.tags:
+        for tag in tags:
             clean_name = tag.path.replace(' ', '_')
             lines.append(f":{clean_name} a owl:Class ;")
             lines.append(f'    rdfs:label "{escape_ttl_literal(tag.path)}" ;')
-            if tag.parent:
+            if tag.parent and tag.parent.id in tags_set:
                 parent_clean = tag.parent.path.replace(' ', '_')
                 lines.append(f"    rdfs:subClassOf :{parent_clean} ;")
             if tag.description:
@@ -705,18 +778,23 @@ def codebook_and_highlights_ttl(db, project, file):
             .all()
         )
 
+        tag_dict = {t.id: t for t in tags}
+
         for hl in highlights:
             content = convert.html_to_plaintext(hl.snippet)
             escaped_content = escape_ttl_literal(content)
             doc_name = escape_ttl_literal(hl.document.name)
             for tag in hl.tags:
-                clean_name = tag.path.replace(' ', '_')
+                if tag.id not in tags_set:
+                    continue
+                tag_obj = tag_dict.get(tag.id, tag)
+                clean_name = tag_obj.path.replace(' ', '_')
                 inst_uri = f":{clean_name}_hl_{hl.id}"
                 lines.append(f"{inst_uri} a :{clean_name} ;")
                 lines.append(f'    dcterms:description "{escaped_content}"^^xsd:string ;')
                 lines.append(f'    dcterms:source "{doc_name}"^^xsd:string ;')
-                if tag.description:
-                    lines.append(f'    rdfs:comment "{escape_ttl_literal(tag.description)}"^^xsd:string ;')
+                if tag_obj.description:
+                    lines.append(f'    rdfs:comment "{escape_ttl_literal(tag_obj.description)}"^^xsd:string ;')
                 lines[-1] = lines[-1][:-2] + " .\n"
 
         file.write("\n".join(lines))
