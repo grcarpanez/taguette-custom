@@ -584,13 +584,21 @@
 
         <div class="form-group mb-2">
           <label for="highlights-export-format" class="font-weight-bold mb-1">{% trans %}Formato do Arquivo:{% endtrans %}</label>
-          <select class="form-control" id="highlights-export-format">
+          <select class="form-control" id="highlights-export-format" onchange="onHighlightsFormatChange();">
             <option value="xlsx">{% trans %}Excel (.xlsx){% endtrans %}</option>
             <option value="csv">{% trans %}CSV (.csv){% endtrans %}</option>
             <option value="html">{% trans %}Documento HTML (.html){% endtrans %}</option>
             <option value="docx">{% trans %}Word (.docx){% endtrans %}</option>
             <option value="pdf">{% trans %}PDF (.pdf){% endtrans %}</option>
           </select>
+        </div>
+
+        <div class="form-group mb-2" id="highlights-transpose-wrap">
+          <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="highlights-transpose">
+            <label class="custom-control-label font-weight-bold" for="highlights-transpose">{% trans %}Transpor tabela (cada coluna para uma tag / formato Ontotext){% endtrans %}</label>
+          </div>
+          <small class="text-muted d-block mt-1">{% trans %}Inverte linhas e colunas, posicionando cada tag/destaque em uma coluna.{% endtrans %}</small>
         </div>
       </div>
       <div class="modal-footer">

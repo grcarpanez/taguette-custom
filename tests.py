@@ -196,6 +196,18 @@ class TestConvert(AsyncTestCase):
             ),
         )
 
+    def test_get_calibre_convert(self):
+        # Explicit env var
+        with mock.patch.dict(os.environ, {'CALIBRE': '/custom/calibre'}):
+            res = convert.get_calibre_convert()
+            self.assertTrue(res.startswith('/custom/calibre'))
+
+        # Auto-detect fallback
+        with mock.patch.dict(os.environ, {}, clear=True):
+            res = convert.get_calibre_convert()
+            self.assertTrue(isinstance(res, str))
+            self.assertTrue(len(res) > 0)
+
 
 class TestPassword(AsyncTestCase):
     @staticmethod
@@ -2740,6 +2752,65 @@ class TestMultiuser(MyHTTPTestCase):
             self.assertEqual(response.status, 200)
             text = await response.text()
             self.assertNotIn(',,C,C', text)
+
+        # Create tag with formula-like name '=='
+        async with self.apost(
+            f'/api/project/{proj_id}/tag/new',
+            json=dict(path='==', description='equal signs'),
+        ) as response:
+            self.assertEqual(response.status, 200)
+
+        # highlights.xlsx?only_populated=false should not treat '==' as formula
+        async with self.aget(f'/project/{proj_id}/export/highlights/.xlsx?only_populated=false') as response:
+            self.assertEqual(response.status, 200)
+            xlsx_bytes = await response.read()
+            import zipfile, io
+            with zipfile.ZipFile(io.BytesIO(xlsx_bytes)) as z:
+                sheet_xml = z.read('xl/worksheets/sheet1.xml').decode('utf-8')
+                self.assertNotIn('<f>', sheet_xml)
+                self.assertNotIn('<f ', sheet_xml)
+
+        # highlights.csv?transposed=true
+        async with self.aget(f'/project/{proj_id}/export/highlights/.csv?transposed=true') as response:
+            self.assertEqual(response.status, 200)
+            lines = (await response.text()).strip().split('\r\n')
+            if len(lines) == 1:
+                lines = lines[0].split('\n')
+            self.assertEqual(len(lines), 5)
+            self.assertTrue(lines[0].startswith('id,'))
+            self.assertTrue(lines[1].startswith('document,'))
+            self.assertTrue(lines[2].startswith('tag,'))
+            self.assertTrue(lines[3].startswith('tag_path,'))
+            self.assertTrue(lines[4].startswith('content,'))
+            # Tag A has a note ('A note description'), so 'A_note' must be present in row 2 (tag row)
+            self.assertIn('A_note', lines[2])
+            # And the note content 'A note description' must be in row 4 (content row)
+            self.assertIn('A note description', lines[4])
+
+        # highlights.csv?transposed=true&include_notes=false
+        async with self.aget(f'/project/{proj_id}/export/highlights/.csv?transposed=true&include_notes=false') as response:
+            self.assertEqual(response.status, 200)
+            lines = (await response.text()).strip().split('\r\n')
+            if len(lines) == 1:
+                lines = lines[0].split('\n')
+            self.assertEqual(len(lines), 5)
+            self.assertNotIn('A_note', lines[2])
+            self.assertNotIn('A note description', lines[4])
+
+        # highlights.xlsx?transposed=true
+        async with self.aget(f'/project/{proj_id}/export/highlights/.xlsx?transposed=true') as response:
+            self.assertEqual(response.status, 200)
+            xlsx_bytes = await response.read()
+            with zipfile.ZipFile(io.BytesIO(xlsx_bytes)) as z:
+                sheet_xml = z.read('xl/worksheets/sheet1.xml').decode('utf-8')
+                # Column A contains headers vertically: r="A1" to r="A5"
+                self.assertIn('r="A1"', sheet_xml)
+                self.assertIn('r="A2"', sheet_xml)
+                self.assertIn('r="A3"', sheet_xml)
+                self.assertIn('r="A4"', sheet_xml)
+                self.assertIn('r="A5"', sheet_xml)
+                self.assertNotIn('r="A6"', sheet_xml)
+                self.assertNotIn('<f>', sheet_xml)
 
         # ontotext.csv?include_notes=false
         async with self.aget(f'/project/{proj_id}/export/ontotext.csv?include_notes=false') as response:

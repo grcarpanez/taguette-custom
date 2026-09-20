@@ -208,120 +208,43 @@ def get_filename_for_highlights_export(path):
         return 'all_tags'
 
 
-@tracer.start_as_current_span('taguette/export/highlights_csv')
-def highlights_csv(db, project_id, path, file, include_notes=True, only_populated=True):
-    """Export highlights to a CSV file.
-    """
-    with contextlib.ExitStack() as stack:
-        if not hasattr(file, 'write'):
-            file = stack.enter_context(open(file, 'w', encoding='utf-8', newline=''))
-        highlights = _get_highlights_for_export(db, project_id, path)
-        writer = csv.writer(file)
-        if include_notes:
-            writer.writerow(['id', 'document', 'tag', 'tag_path', 'tag_note', 'content'])
-        else:
-            writer.writerow(['id', 'document', 'tag', 'tag_path', 'content'])
-
-        used_tag_ids = set()
-        for id, snippet, document, tags in highlights:
-            content = convert.html_to_plaintext(snippet)
-            if not tags:
-                if include_notes:
-                    writer.writerow([id, document, '', '', '', content])
-                else:
-                    writer.writerow([id, document, '', '', content])
-            else:
-                for tag in tags:
-                    used_tag_ids.add(tag.id)
-                    if include_notes:
-                        writer.writerow([
-                            id,
-                            document,
-                            tag.path,
-                            tag.full_path,
-                            tag.description,
-                            content,
-                        ])
-                    else:
-                        writer.writerow([
-                            id,
-                            document,
-                            tag.path,
-                            tag.full_path,
-                            content,
-                        ])
-
-        if not only_populated:
-            all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
-            if path:
-                all_tags_q = all_tags_q.filter(database.Tag.path.startswith(path))
-            all_tags = all_tags_q.order_by(database.Tag.path).all()
-            for tag in all_tags:
-                if tag.id not in used_tag_ids:
-                    if include_notes:
-                        writer.writerow(['', '', tag.path, tag.full_path(), tag.description or '', ''])
-                    else:
-                        writer.writerow(['', '', tag.path, tag.full_path(), ''])
-
-
-@tracer.start_as_current_span('taguette/export/highlights_xlsx')
-def highlights_xslx(db, project_id, path, filename, include_notes=True, only_populated=True):
-    """Export highlights to an Excel file with wrapped text and header-calibrated column widths.
-    """
+def _build_highlights_table(db, project_id, path, include_notes=True, only_populated=True):
     highlights = _get_highlights_for_export(db, project_id, path)
-
-    workbook = xlsxwriter.Workbook(filename)
-    sheet = workbook.add_worksheet('highlights')
-
-    header_format = workbook.add_format({'bold': True, 'text_wrap': True})
-    cell_format = workbook.add_format({'text_wrap': True, 'valign': 'top'})
 
     if include_notes:
         headers = ['id', 'document', 'tag', 'tag_path', 'tag_note', 'content']
     else:
         headers = ['id', 'document', 'tag', 'tag_path', 'content']
 
-    for col, h in enumerate(headers):
-        sheet.write(0, col, h, header_format)
-
-    sheet.set_column(0, 0, 8.0, cell_format)
-    sheet.set_column(1, 1, 20.0, cell_format)
-    sheet.set_column(2, 2, 20.0, cell_format)
-    sheet.set_column(3, 3, 30.0, cell_format)
-    if include_notes:
-        sheet.set_column(4, 4, 30.0, cell_format)
-        sheet.set_column(5, 5, 50.0, cell_format)
-    else:
-        sheet.set_column(4, 4, 50.0, cell_format)
-
-    row = 1
+    rows = []
     used_tag_ids = set()
     for id, snippet, document, tags in highlights:
         content = convert.html_to_plaintext(snippet)
         if not tags:
-            sheet.write(row, 0, str(id), cell_format)
-            sheet.write(row, 1, document, cell_format)
-            sheet.write(row, 2, '', cell_format)
-            sheet.write(row, 3, '', cell_format)
             if include_notes:
-                sheet.write(row, 4, '', cell_format)
-                sheet.write(row, 5, content, cell_format)
+                rows.append([str(id), document, '', '', '', content])
             else:
-                sheet.write(row, 4, content, cell_format)
-            row += 1
+                rows.append([str(id), document, '', '', content])
         else:
             for tag in tags:
                 used_tag_ids.add(tag.id)
-                sheet.write(row, 0, str(id), cell_format)
-                sheet.write(row, 1, document, cell_format)
-                sheet.write(row, 2, tag.path, cell_format)
-                sheet.write(row, 3, tag.full_path, cell_format)
                 if include_notes:
-                    sheet.write(row, 4, tag.description, cell_format)
-                    sheet.write(row, 5, content, cell_format)
+                    rows.append([
+                        str(id),
+                        document,
+                        tag.path,
+                        tag.full_path,
+                        tag.description,
+                        content,
+                    ])
                 else:
-                    sheet.write(row, 4, content, cell_format)
-                row += 1
+                    rows.append([
+                        str(id),
+                        document,
+                        tag.path,
+                        tag.full_path,
+                        content,
+                    ])
 
     if not only_populated:
         all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
@@ -330,16 +253,124 @@ def highlights_xslx(db, project_id, path, filename, include_notes=True, only_pop
         all_tags = all_tags_q.order_by(database.Tag.path).all()
         for tag in all_tags:
             if tag.id not in used_tag_ids:
-                sheet.write(row, 0, '', cell_format)
-                sheet.write(row, 1, '', cell_format)
-                sheet.write(row, 2, tag.path, cell_format)
-                sheet.write(row, 3, tag.full_path(), cell_format)
                 if include_notes:
-                    sheet.write(row, 4, tag.description or '', cell_format)
-                    sheet.write(row, 5, '', cell_format)
+                    rows.append(['', '', tag.path, tag.full_path(), tag.description or '', ''])
                 else:
-                    sheet.write(row, 4, '', cell_format)
-                row += 1
+                    rows.append(['', '', tag.path, tag.full_path(), ''])
+
+    return headers, rows
+
+
+def _build_highlights_table_transposed(db, project_id, path, include_notes=True, only_populated=True):
+    highlights = _get_highlights_for_export(db, project_id, path)
+
+    headers = ['id', 'document', 'tag', 'tag_path', 'content']
+    columns = []
+    used_tag_ids = set()
+    notes_added = set()
+
+    for id, snippet, document, tags in highlights:
+        content = convert.html_to_plaintext(snippet)
+        if not tags:
+            columns.append([str(id), document, '', '', content])
+        else:
+            for tag in tags:
+                used_tag_ids.add(tag.id)
+                columns.append([
+                    str(id),
+                    document,
+                    tag.path,
+                    tag.full_path,
+                    content,
+                ])
+                if include_notes and tag.description and tag.id not in notes_added:
+                    notes_added.add(tag.id)
+                    columns.append([
+                        '',
+                        '',
+                        f"{tag.path}_note",
+                        '',
+                        tag.description,
+                    ])
+
+    if not only_populated:
+        all_tags_q = db.query(database.Tag).filter(database.Tag.project_id == project_id)
+        if path:
+            all_tags_q = all_tags_q.filter(database.Tag.path.startswith(path))
+        all_tags = all_tags_q.order_by(database.Tag.path).all()
+        for tag in all_tags:
+            if tag.id not in used_tag_ids:
+                columns.append(['', '', tag.path, tag.full_path(), ''])
+                if include_notes and tag.description and tag.id not in notes_added:
+                    notes_added.add(tag.id)
+                    columns.append([
+                        '',
+                        '',
+                        f"{tag.path}_note",
+                        '',
+                        tag.description,
+                    ])
+
+    return headers, columns
+
+
+@tracer.start_as_current_span('taguette/export/highlights_csv')
+def highlights_csv(db, project_id, path, file, include_notes=True, only_populated=True, transposed=False):
+    """Export highlights to a CSV file.
+    """
+    with contextlib.ExitStack() as stack:
+        if not hasattr(file, 'write'):
+            file = stack.enter_context(open(file, 'w', encoding='utf-8', newline=''))
+        writer = csv.writer(file)
+        if not transposed:
+            headers, rows = _build_highlights_table(db, project_id, path, include_notes=include_notes, only_populated=only_populated)
+            writer.writerow(headers)
+            for row in rows:
+                writer.writerow(row)
+        else:
+            headers, columns = _build_highlights_table_transposed(db, project_id, path, include_notes=include_notes, only_populated=only_populated)
+            for row_idx, h in enumerate(headers):
+                writer.writerow([h] + [col[row_idx] for col in columns])
+
+
+@tracer.start_as_current_span('taguette/export/highlights_xlsx')
+def highlights_xslx(db, project_id, path, filename, include_notes=True, only_populated=True, transposed=False):
+    """Export highlights to an Excel file with wrapped text and header-calibrated column widths.
+    """
+    workbook = xlsxwriter.Workbook(filename, {'strings_to_formulas': False})
+    sheet = workbook.add_worksheet('highlights')
+
+    header_format = workbook.add_format({'bold': True, 'text_wrap': True})
+    cell_format = workbook.add_format({'text_wrap': True, 'valign': 'top'})
+
+    if not transposed:
+        headers, rows = _build_highlights_table(db, project_id, path, include_notes=include_notes, only_populated=only_populated)
+        for col, h in enumerate(headers):
+            sheet.write(0, col, h, header_format)
+
+        sheet.set_column(0, 0, 8.0, cell_format)
+        sheet.set_column(1, 1, 20.0, cell_format)
+        sheet.set_column(2, 2, 20.0, cell_format)
+        sheet.set_column(3, 3, 30.0, cell_format)
+        if include_notes:
+            sheet.set_column(4, 4, 30.0, cell_format)
+            sheet.set_column(5, 5, 50.0, cell_format)
+        else:
+            sheet.set_column(4, 4, 50.0, cell_format)
+
+        for row_idx, row in enumerate(rows, start=1):
+            for col_idx, val in enumerate(row):
+                sheet.write(row_idx, col_idx, val, cell_format)
+    else:
+        headers, columns = _build_highlights_table_transposed(db, project_id, path, include_notes=include_notes, only_populated=only_populated)
+        sheet.set_column(0, 0, 15.0, header_format)
+        if columns:
+            sheet.set_column(1, len(columns), 30.0, cell_format)
+
+        for row_idx, h in enumerate(headers):
+            sheet.write(row_idx, 0, h, header_format)
+            for col_idx, col in enumerate(columns, start=1):
+                sheet.write(row_idx, col_idx, col[row_idx], cell_format)
 
     workbook.close()
 
@@ -485,7 +516,7 @@ def codebook_csv(tags, file):
 def codebook_xlsx(tags, filename):
     """Export a codebook in Excel format for the given tags.
     """
-    workbook = xlsxwriter.Workbook(filename)
+    workbook = xlsxwriter.Workbook(filename, {'strings_to_formulas': False})
     sheet = workbook.add_worksheet('codebook')
 
     header = workbook.add_format({'bold': True})

@@ -125,6 +125,7 @@ class ExportHighlightsCsv(BaseHandler):
         project, _ = self.get_project(project_id)
         include_notes = self.get_argument('include_notes', 'true').lower() in ('true', '1', 'yes')
         only_populated = self.get_argument('only_populated', 'true').lower() in ('true', '1', 'yes')
+        transposed = self.get_argument('transposed', 'false').lower() in ('true', '1', 'yes')
 
         name = export.get_filename_for_highlights_export(path)
         self.set_header('Content-Type', 'text/csv; charset=utf-8')
@@ -141,6 +142,7 @@ class ExportHighlightsCsv(BaseHandler):
             WriteAdapter(self.write),
             include_notes=include_notes,
             only_populated=only_populated,
+            transposed=transposed,
         )
         return self.finish()
 
@@ -155,6 +157,7 @@ class ExportHighlightsXlsx(BaseHandler):
         project, _ = self.get_project(project_id)
         include_notes = self.get_argument('include_notes', 'true').lower() in ('true', '1', 'yes')
         only_populated = self.get_argument('only_populated', 'true').lower() in ('true', '1', 'yes')
+        transposed = self.get_argument('transposed', 'false').lower() in ('true', '1', 'yes')
 
         name = export.get_filename_for_highlights_export(path)
         self.set_header('Content-Type',
@@ -176,6 +179,7 @@ class ExportHighlightsXlsx(BaseHandler):
                 filename,
                 include_notes=include_notes,
                 only_populated=only_populated,
+                transposed=transposed,
             )
             with open(filename, 'rb') as fp:
                 chunk = fp.read(4096)

@@ -2618,8 +2618,26 @@ function openExportHighlightsModal(format) {
   if(notes) notes.checked = true;
   var unpop = document.getElementById('highlights-include-unpopulated');
   if(unpop) unpop.checked = false;
+  var trans = document.getElementById('highlights-transpose');
+  if(trans) trans.checked = false;
+
+  onHighlightsFormatChange();
 
   $('#export-highlights-modal').modal('show');
+}
+
+function onHighlightsFormatChange() {
+  var formatElem = document.getElementById('highlights-export-format');
+  var wrap = document.getElementById('highlights-transpose-wrap');
+  if(!formatElem || !wrap) return;
+  var format = formatElem.value;
+  if(format === 'xlsx' || format === 'csv') {
+    wrap.style.display = '';
+  } else {
+    wrap.style.display = 'none';
+    var trans = document.getElementById('highlights-transpose');
+    if(trans) trans.checked = false;
+  }
 }
 
 function executeExportHighlights() {
@@ -2629,6 +2647,8 @@ function executeExportHighlights() {
   var includeNotes = document.getElementById('highlights-include-notes').checked;
   var includeUnpopulated = document.getElementById('highlights-include-unpopulated').checked;
   var onlyPopulated = !includeUnpopulated;
+  var transElem = document.getElementById('highlights-transpose');
+  var transposed = (format === 'xlsx' || format === 'csv') && transElem && transElem.checked;
 
   var tagPart = '';
   if(scope === 'current' && current_tag) {
@@ -2636,7 +2656,8 @@ function executeExportHighlights() {
   }
 
   var url = base_path + '/project/' + project_id + '/export/highlights/' + tagPart + '.' + format +
-            '?include_notes=' + includeNotes + '&only_populated=' + onlyPopulated;
+            '?include_notes=' + includeNotes + '&only_populated=' + onlyPopulated +
+            '&transposed=' + transposed;
 
   $('#export-highlights-modal').modal('hide');
   window.location.href = url;
