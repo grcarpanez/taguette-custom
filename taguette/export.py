@@ -709,14 +709,14 @@ def ontotext_mapping_json(project, tags):
             })
 
         if tag.id in tags_with_notes:
+            note_col = f"{clean_name}_note"
             prop_mappings.append({
                 "property": {
                     "transformation": {"expression": "rdfs", "language": "prefix"},
                     "valueSource": {"source": "constant", "constant": "comment"}
                 },
                 "values": [{
-                    "transformation": {"expression": "", "language": "prefix"},
-                    "valueSource": {"source": "constant", "constant": tag.description},
+                    "valueSource": {"columnName": note_col, "source": "column"},
                     "valueType": {
                         "type": "datatype_literal",
                         "datatype": {
@@ -760,25 +760,6 @@ def ontotext_mapping_json(project, tags):
                 }]
             }
         ]
-
-        if tag.id in tags_with_notes:
-            note_col = f"{clean_name}_note"
-            prop_mappings.append({
-                "property": {
-                    "transformation": {"expression": "rdfs", "language": "prefix"},
-                    "valueSource": {"source": "constant", "constant": "comment"}
-                },
-                "values": [{
-                    "valueSource": {"columnName": note_col, "source": "column"},
-                    "valueType": {
-                        "type": "datatype_literal",
-                        "datatype": {
-                            "transformation": {"expression": "xsd", "language": "prefix"},
-                            "valueSource": {"source": "constant", "constant": "string"}
-                        }
-                    }
-                }]
-            })
 
         subject_mappings.append({
             "propertyMappings": prop_mappings,

@@ -67,6 +67,7 @@ Este documento é a bússola operacional do projeto. Ele deve ser consultado e a
   - Exportação direta em Turtle RDF (`/project/<id>/export/codebook.ttl`).
   - Exportação transposta de destaques (matriz para Ontotext / Modelo Aba 2) com metadados verticais e tratamento de fórmulas no XlsxWriter (`strings_to_formulas: False`).
   - Preservação obrigatória de classes ancestrais com descendentes populados até a raiz na exportação de destaques (`INC-001`), eliminando erros de colunas inexistentes no Ontotext Refine ao importar `mapping.json`.
+  - Refinamento do gerador `mapping.json`: vinculação dinâmica de `rdfs:comment` à coluna `<tag>_note` no sujeito da classe `owl:Class` (`INC-002`), eliminando o valor estático chumbado e a duplicata conflitante nas instâncias GREL.
 - [x] Frontend:
   - Árvore lateral recursiva com setas expansíveis (`▶ / ▼`) e botão rápido `➕ Subtag`.
   - Painel de destaques exibindo cabeçalho da categoria, full path, anotação e cards de subtags.

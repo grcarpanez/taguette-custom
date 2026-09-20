@@ -2673,10 +2673,17 @@ class TestMultiuser(MyHTTPTestCase):
             self.assertIn('owl', mapping['namespaces'])
             self.assertIn('rdfs', mapping['namespaces'])
             self.assertIn('dcterms', mapping['namespaces'])
-            # Check subClassOf relation between B and A
             json_str = json.dumps(mapping)
             self.assertIn('"constant": "subClassOf"', json_str)
-            self.assertIn('A_note', json_str)
+            self.assertIn('"columnName": "A_note"', json_str)
+            # Ensure comment is not duplicated in GREL subject mappings
+            for sm in mapping.get('subjectMappings', []):
+                if sm.get('subject', {}).get('transformation', {}).get('language') == 'grel':
+                    for pm in sm.get('propertyMappings', []):
+                        self.assertNotEqual(
+                            pm.get('property', {}).get('valueSource', {}).get('constant'),
+                            'comment'
+                        )
 
         # 4. Test codebook.ttl
         async with self.aget(f'/project/{proj_id}/export/codebook.ttl') as response:
