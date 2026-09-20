@@ -287,6 +287,11 @@ li.tag-current {
   padding: 0.125rem 0.25rem;
 }
 
+#export-button .dropdown-menu {
+  right: 0;
+  left: auto;
+}
+
 a.dropdown-item:hover {
   color: white !important;
   text-decoration: none;
